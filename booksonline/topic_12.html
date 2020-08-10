@@ -102,7 +102,9 @@ All above information captured must be saved by clicking <b>Capture Data</b> but
 
 User can select a <b>Captured Data</b> from the list and display the details in Form Interface by clicking <b>Display Data In Form</b> button.<br><br>
 
-To delete the captured data from the list, user need to select a <b>Captured Data</b> and click <b>Delete Captured Row</b> button.<br><br><br><br>
+To delete the captured data from the list, user need to select a <b>Captured Data</b> and click <b>Delete Captured Row</b> button.<br><br>
+
+Following image shows the <b>Cuboid Captured Data [Step 1]</b> form.<br><br><br>
 
 
 <img src="images/topic_12_2.jpg" alt="">
@@ -115,7 +117,32 @@ To delete the captured data from the list, user need to select a <b>Captured Dat
 <li class="blockList"><a name="3">
 </a>
 <h3>3. Define the relationship of entity with another entity.</h3>
-<br><br><br>
+<br>Following queries are answered in this Step :<br><br>
+1. Is there any Source Entity referenced to another Source Entity?<br>
+2. What is the Source Entity?<br>
+3. What is the Referenced Entity?<br>
+4. What are the Ids of Source and Referenced entities?<br><br>
+
+User captures this information in "Cuboid References Setting" form. This form is opened by clicking <b>Set Foreign Key...</b> button in <b>Cuboid Capture Data Step[1]</b> form. </br></br>
+
+<b>Cuboid References Settings</b> displays following information:<br><br>
+<b>Source Cuboid</b>: The list of cuboids on BCP Server.<br><br>
+<b>Source Column List</b>: The list of Columns in selected Source Cuboid.<br><br>
+<b>Referenced Cuboid</b>: The list of cuboids on BCP Server.<br><br>
+<b>Referenced Column List</b>: The list of Columns in selected Referenced Cuboid.<br><br>
+When Source Cuboid is selected the Cuboid Id and Cuboid Name and list of <b>Source Column List</b> is populated.<br><br>
+When Referenced Cuboid is selected the Referenced Cuboid Id and Cuboid Name and list of <b>Referenced Column List</b> is populated.<br><br>
+
+When user set one or more Primary Key Columns from Source Column List; the corresponding Primary Key Ids are populated in <b>Primary Key Column Ids</b>.</br><br>
+
+When user set one or more Referenced Columns from Referenced Column List; the corresponding Referenced Column Key Ids are populated in <b>Referenced Column Ids</b>.</br><br>
+
+User need to click <b>Save Foreign Key Data</b> to save this captured information into <b>Foreign Key Data</b> list.<br><br>
+
+To display foreign key data in form interface, user selects the <b>Foreign Key Data</b> from the list and clicks <b>Display Foreign Key Data</b> button.<br><br>
+To delete foreign key data from the list, user selects the <b>Foreign Key Data</b> from the list and clicks <b>Delete Foreign Key Data</b> button. The foreign key data is removed from the list after confirmation from user.<br><br>
+
+Following image shows <b>Column References Setting Form</b>.  <br><br>
 
 
 <img src="images/topic_12_3.jpg" alt="">
@@ -128,7 +155,60 @@ To delete the captured data from the list, user need to select a <b>Captured Dat
 <li class="blockList"><a name="4">
 </a>
 <h3>4. Define Grammar Rule to generate the Grammar.</h3>
-<br><br><br>
+<br>Following queries are answered in this Step :<br><br>
+
+1. What entities in Table are updated?<br>
+2. What are the key columns?<br>
+3. What are the updated columns?<br>
+4. Is there any Measure applied to update the entity?<br>
+5. What are the Measure filters applied to update the entity?<br>
+6. What is the Grammar Pattern to Generate the Grammer Output?<br><br>
+
+Most of the above queries are answered in previous steps and stored in Captured Data.<br><br>
+
+The Grammar Output Generation is done in <b>Define Grammar Form</b>. This form displays following information: <br><br>
+
+<b>Captured Data List</b><br>
+This list shows the information caputured in <b>Capture Cuboid Data [Step 1] Form</b> for every cuboid. This information includes following: <br>
+CuboidId,<br> 
+CuboidName,<br> 
+Primary Key Columns,<br> 
+Primary Key ColumnIds,<br> 
+List of ColumnsNames and ColumnIds,<br> 
+Measure Column and Measure ColumnId,<br> 
+List of Measures<br><br>
+
+<b>Grammar Pattern </b><br>
+Grammar Pattern is the pattern of Strings to use for generating the Grammer output. The examples of Grammar Patterns are as follows: <br>
+[Primary Keys] , [Filter Condition] = [Update Column]<br>
+[Primary Keys] = [Update Column]<br>
+[Filter Condition] , [Primary Keys] = [Update Column]<br><br>
+
+User selects the Grammar Pattern to generate Grammar Output.<br><br>
+
+<b>Grammar Output </b><br>
+Grammar Output is generated using <b>Grammar Pattern</b> by replacing String Patterns by actual <b>Filters</b> and <b>Column Names</b> and <b>Column References</b> of Selected Columns.<br>
+First, User can select Grammar Pattern and generate Grammar Output for a Single column. User can confirm the generated Grammar Output and further can generate Grammar Output for Multiple columns.<br><br>
+Following are the examples of <b>Grammar Pattern</b> and corresponding <b>Grammar Output</b> generated: <br><br>
+
+Grammar Pattern: [Primary Keys] , [Filter Condition] = [Update Column]	<br>
+Grammar Output: [customer|product],filter(measure='Customer Fcst')=update_column('19-Jan')<br><br>
+
+Grammar Pattern: [Primary Keys] = [Update Column]	<br>
+Grammar Output: [customer|product]=update_column('19-Jan')<br><br>
+
+Grammar Pattern: [Filter Condition] , [Primary Keys] = [Update Column]	<br>
+Grammar Output: filter(measure='Customer Fcst'), [customer|product]=update_column('19-Jan')<br><br>
+
+
+<b>Grammar Output List</b><br>
+The Grammar Output generated is stored in Grammar Outpupt List.<br> 
+User can view Grammar Output by selecting it from the list and clicking <b>View Grammar Output</b> in form interface. <br> 
+User can delete Grammar Output by selecting it from the list and clicking <b>Delete Grammar Output</b>. <br><br>
+
+Following image shows <b>Define Grammar Form</b>.  
+
+<br><br>
 
 
 <img src="images/topic_12_4.jpg" alt="">
@@ -141,7 +221,51 @@ To delete the captured data from the list, user need to select a <b>Captured Dat
 <li class="blockList"><a name="5">
 </a>
 <h3>5. Extract the Grammar based on information captured.</h3>
-<br><br><br>
+<br>Cuboid Information Captured while defining the Cuboid Keys and Cuboid Grammar are saved in different NameRanges in Excel.<br>
+
+<b>Extract Data Form</b> is developed to get this captured information as <b>Name=Value</b> pair list for further processing.<br><br>
+
+Extract Data Form displays following :<br><br>
+
+<b>Captured Data Ranges</b><br>
+It is the list of NameRanges used to store the Captured Data in Excel.<br><br>
+
+<b>Captured Information</b><br>
+It is the list of Columns present in <b>Captured Data Range</b>.<br><br>
+
+<b>Sample Data</b><br>
+It displays the Sample List of data present in Selected <b>Captured Information</b> of Selected <b>Captured Data Range</b>.<br><br>
+
+<b>Extract Information List</b><br>
+It is the list of the combination of <b>Captured Data Range</b> and <b>Captured Data Column</b> in order to generate <b>Name:Value pair</b> of Extracted information for selected Cuboid.<br>
+User can maintain this list of Extract Information by selecting <b>Captured Information</b> of <b>Captured Data Range</b> and clicking <b>Extract This Captured Information</b>.<br> 
+User can delete Extract Information by clicking <b>Delete Extract Info Data</b>.<br><br>
+
+<b>Extract Captured Data</b><br>
+User can select <b>Extract Information</b> from the List and Choose the <b>Cuboid</b> from Cuboid List, to generate <b>Name:Value pair</b> of that information for that Cuboid.<br><br>
+
+For Example,<br>
+To get <b>Grammar Output</b> defined on Cuboid <b>Internal Sales Forecast Weekly</b> user makes following selection and click <b>Extract Captured Data</b>:<br><br>
+
+Captured Data Range : CUBOID_WISE_GRAMMAR_OUTPUT<br> 
+Captured Data Column: GrammarOuput<br>
+Cuboid : Amazon Forecast Weekly<br><br>
+
+Following is the Extracted Information returned by above query: <br><br>
+GrammerOutput~Customer , Product=LIST(Products|Product Name) , update_column(['Actual 26-Jan-2020'])~CUBOID_WISE_GRAMMER_OUTPUT<br>
+GrammerOutput~Customer , Product=LIST(Products|Product Name) , update_column(['Actual 02-Feb-2020'])~CUBOID_WISE_GRAMMER_OUTPUT<br>
+GrammerOutput~Customer , Product=LIST(Products|Product Name) , update_column(['Forecast 14-Jun-2020'])~CUBOID_WISE_GRAMMER_OUTPUT<br>
+GrammerOutput~Customer , Product=LIST(Products|Product Name) , update_column(['Forecast 21-Jun-2020'])~CUBOID_WISE_GRAMMER_OUTPUT<br>
+GrammerOutput~Customer , Product=LIST(Products|Product Name) , Measure , filter([Measure]=['Backlog']) , update_column(['Actual 19-Jan-2020'])~CUBOID_WISE_GRAMMER_OUTPUT<br>
+GrammerOutput~Customer , Product=LIST(Products|Product Name) , Measure , filter([Measure]=['Backlog']) , update_column(['Actual 26-Jan-2020'])~CUBOID_WISE_GRAMMER_OUTPUT<br><br>
+
+
+<b>Save Extracted Captured Data To Worksheet</b><br>
+'Save Extracted Captured Data To Worksheet' allows user to save the Extracted Information into a Worksheet. <br><br><br>
+
+Following image shows <b>Extract Data Form</b>.  <br>
+
+<br><br>
 
 
 <img src="images/topic_12_5.jpg" alt="">
