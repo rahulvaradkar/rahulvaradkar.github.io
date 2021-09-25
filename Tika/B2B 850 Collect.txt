@@ -1,0 +1,133 @@
+<PurchaseOrder documentType="CORDERS" id="22" parentID="1" solutionID="FACEB" trackingID="000566378" version="1.12" environment="Production" receiverID="receiver short name stub" senderID="sender short name stub">
+  <PurchaseOrderHeader purpose="Original" type="StandAloneOrder">
+    <TransactionControlNumber>1014</TransactionControlNumber>
+    <SourceTransactionType>850</SourceTransactionType>
+    <Interchange>
+      <InterchangeControlNumber>100000014</InterchangeControlNumber>
+      <NumberOfGroups>1</NumberOfGroups>
+      <InterchangeDetail type="Standard">X12</InterchangeDetail>
+      <InterchangeDetail type="SenderQualifier">TST1MICROCENTER</InterchangeDetail>
+      <InterchangeDetail type="SenderId">ZZ</InterchangeDetail>
+      <InterchangeDetail type="ReceiverQualifier">FBCHANNELOPST  </InterchangeDetail>
+      <InterchangeDetail type="ReceiverId">200207</InterchangeDetail>
+      <InterchangeDetail type="Date">2020-02-07</InterchangeDetail>
+      <InterchangeDetail type="Time">14:26:00</InterchangeDetail>
+      <InterchangeDetail type="TestIndicator">Production</InterchangeDetail>
+      <Group>
+        <GroupControlNumber>1014</GroupControlNumber>
+        <GroupDetail type="SenderId">TST1MICROCENTER</GroupDetail>
+        <GroupDetail type="ReceiverId">FBCHANNELOPST</GroupDetail>
+        <GroupDetail type="Date">2020-02-07</GroupDetail>
+        <GroupDetail type="Time">14:26:00</GroupDetail>
+        <GroupDetail type="Version">004010</GroupDetail>
+      </Group>
+    </Interchange>
+    <CreationDateTime>2020-02-07T14:26:00-07:00</CreationDateTime>
+    <PurchaseOrderNumber>193845</PurchaseOrderNumber>
+    <PurchaseOrderDate>2020-02-07</PurchaseOrderDate>
+    <Event type="RequestedShip">
+      <StartDate>
+        <Date>2020-02-14</Date>
+      </StartDate>
+    </Event>
+    <Event type="DeliverRequested">
+      <StartDate>
+        <Date>2020-02-21</Date>
+      </StartDate>
+    </Event>
+    <Event type="CancelAfter">
+      <StartDate>
+        <Date>2020-03-08</Date>
+      </StartDate>
+    </Event>
+    <GenericAmount type="Gross">
+      <Amount>14852.75</Amount>
+    </GenericAmount>
+    <DocumentDefaultCurrency>
+      <Currency type="Buyer">USD</Currency>
+    </DocumentDefaultCurrency>
+    <DocumentReference type="ReferenceType">
+      <ID type="InternalVendorNumber">26685</ID>
+    </DocumentReference>
+    <DocumentReference type="FreeFormTextType">
+      <ID type="LettersOrNotes">PO Notes</ID>
+      <Description type="FreeformMessageText">PURCHASE ORDER NOTES</Description>
+      <Description type="FreeformMessageText">Contact Note</Description>
+      <Description type="FreeformMessageText">PH- 55-555-5555</Description>
+      <Description type="FreeformMessageText">ACCT ID NOTES</Description>
+      <Description type="FreeformMessageText">ACCOUNT REP NOtes</Description>
+    </DocumentReference>
+    <FreightTerms>
+      <MethodOfPayment>PrepaidSeller</MethodOfPayment>
+    </FreightTerms>
+    <Party role="ShipTo">
+      <PartyID>001</PartyID>
+      <Name>#001 DISTRIBUTION CENTER</Name>
+      <Address>
+        <AddressLine sequence="1">2701-B CHARTER STREET</AddressLine>
+        <City>COLUMUBS</City>
+        <CountrySubDivision>OH</CountrySubDivision>
+        <Country/>
+        <Postal>43228</Postal>
+      </Address>
+    </Party>
+    <TransactionTerms>
+      <NetDaysDue/>
+    </TransactionTerms>
+    <TotalNumberOfLines>3</TotalNumberOfLines>
+  </PurchaseOrderHeader>
+  <PurchaseOrderLine>
+    <LineNumber>001</LineNumber>
+    <Item>
+      <ItemID>
+        <ID type="VendorItemNumber">301-00171-01</ID>
+        <ID type="BuyerItemNumber">0000927467</ID>
+      </ItemID>
+    </Item>
+    <Quantity type="Ordered" unitCode="EA">5</Quantity>
+    <UnitPrice type="UnitPrice">
+      <UnitAmount>
+        <Amount>425.65</Amount>
+      </UnitAmount>
+    </UnitPrice>
+    <TotalAmount>
+      <Amount>2128.25</Amount>
+    </TotalAmount>
+  </PurchaseOrderLine>
+  <PurchaseOrderLine>
+    <LineNumber>002</LineNumber>
+    <Item>
+      <ItemID>
+        <ID type="VendorItemNumber">301-00171-01</ID>
+        <ID type="BuyerItemNumber">0000927467</ID>
+      </ItemID>
+    </Item>
+    <Quantity type="Ordered" unitCode="EA">15</Quantity>
+    <UnitPrice type="UnitPrice">
+      <UnitAmount>
+        <Amount>424.15</Amount>
+      </UnitAmount>
+    </UnitPrice>
+    <TotalAmount>
+      <Amount>6362.25</Amount>
+    </TotalAmount>
+  </PurchaseOrderLine>
+  <PurchaseOrderLine>
+    <LineNumber>003</LineNumber>
+    <Item>
+      <ItemID>
+        <ID type="VendorItemNumber">301-00171-01</ID>
+        <ID type="BuyerItemNumber">0000927467</ID>
+      </ItemID>
+    </Item>
+    <Quantity type="Ordered" unitCode="EA">15</Quantity>
+    <UnitPrice type="UnitPrice">
+      <UnitAmount>
+        <Amount>424.15</Amount>
+      </UnitAmount>
+    </UnitPrice>
+    <TotalAmount>
+      <Amount>6362.25</Amount>
+    </TotalAmount>
+  </PurchaseOrderLine>
+</PurchaseOrder>

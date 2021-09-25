@@ -1,0 +1,15 @@
+<users>
+   <user id="100">
+      <firstname>Tom</firstname>
+      <lastname>Hanks</lastname>
+      <age>34</age>
+   </user>
+   <user id="101">
+      <firstname>Lokesh</firstname>
+      <lastname>Gupta</lastname>
+   </user>
+   <user id="102">
+      <firstname>HowToDo</firstname>
+      <lastname>InJava</lastname>
+   </user>
+</users>

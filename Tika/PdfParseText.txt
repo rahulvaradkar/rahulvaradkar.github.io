@@ -1,0 +1,220 @@
+rpv......... Contents of the PDF :
+Purchase Order
+(Confirmed)
+AE10071871
+
+Amount: $60,000.00 USD
+Version: 1
+
+Purchase Order: AE10071871
+
+This purchase order was delivered by Ariba Network.   For more information about Ariba and Ariba Network, visit http://www.ariba.com.
+
+From:
+Teva Bazel 5  
+5 Bazel St.
+4951033 Petah Tikva
+
+ Israel
+
+To: 
+BOARDWALKTECH, INC
+10050 N. Wolfe Rd. #276
+Cupertino , CA 95014
+United States
+Phone: +1 (650) 6186116
+Fax:
+Email: ronald.
+nathan@boardwalktech.com
+
+ 
+
+Payment Terms 
+NET 60
+
+Comments 
+Comment Type: Terms and Conditions
+Body:.??????/??????? ?? ????? ???? ????? ?? ?????? ?????? ?????? ????? ?????? ,+???? ????? ????? ???????? ,???? ?????? ???? ????? ?? ?? 
+??????? ???????? ????????
+Notwithstanding the above payment terms definition, actual payment terms shall be EOM +, and payment shall be made within the number of days 
+specified above counted from the last day of the month of receipt/scanning of the valid invoice and required documentation.
+
+??? ???,
+.?????? ????? ??? ????????? ????? ???? ????? ??? ????? ??? ?????
+?? ????? ?''? ?????? ?? ??? ??
+''Confirm Order''
+.?????? ??? ?? ?????? ???? ???? ????? ?? ,???????? ???? ?? ??
+
+.?????? ?????? ???? ?????? ?????? ????? .???? ????? ?????? ''????? ??'' ????? ????? ?? ?????? ?? ???? ??? ??
+
+:??? ??????
+.??? ?? ?????? ???? ?? ???????? ?? ???? ????
+
+:???? ????? ?????? ????? ?? ??? ??????? ????? ????? ?????? ??????? ?????
+APIL.INQUIRY@teva.co.il
+
+?????? ????? ??? ???? ?????? ?? ????????
+(???? ???????? ?? ??????? ????? ????)
+????? ????? ???? ?????? ?????? ?????
+: ?????? ?????? ???????? ????
+09-8600503 :?????
+: ????? ??
+SupportTeam@nipendo.com
+
+?????? ?????? ????? ?? ,?????? ?????
+???? ??? ,5 ??? ????
+
+
+
+Material
+Amount-Based Line
+
+Line Items
+
+Dear Sir/ Madam,
+
+For clarifications and questions regarding unpaid payments, please contact: APIL.INQUIRY@teva.co.il
+Please specify Teva PO number on invoices
+Instructions for goods imported to Teva IL:
+Please make sure to issue all necessary shipping documentation prior to the shipment (EUR1/EUR-MED/OCC/Invoice/Packing list, etc.) in order 
+to avoid any delays in customs release.
+For any outbound shipment out US, please follow the below instruction:
+Package up to 25 kg use FedEx customer no. 216607740
+Please Make sure to issue 2 sets of original documentation. Place one set inside the package and the other on the outside. Scan it and email it to 
+us once the shipment is being picked up.
+For more instruction please contact: Tevalmport@tevapharm.com.
+In case of shipping materials for R&D or for laboratory usage, the following shipping declaration must be indicated in the shipping documents:
+''For laboratory use only- not intended for drug manufacturing, not for household, human or animal consumption''
+
+Invoices must be sent into Teva's systems via the Nipendo platform \ Portal.
+In order to use the Nipendo platform you need to register with Nipendo first:
+Nipendo' s contact details:
+Toll-Free +1 (888) 930-1015
+GlobalSupport@Nipendo.com
+
+Please send your original Bank Guarantee directly by courier to:
+Teva Pharmaceutical Ltd.
+Basel 5, Petach Tikva, 4951033, Israel
+
+Other Information 
+Requester Email: Neta.Benshmuel@teva.co.il
+Requester: Neta Rosenberg
+Purchasing Unit Name: Teva Pharmaceutical Indus
+Legal Terms and Conditions 
+of Purchase:
+
+Teva- English Terms and Conditions can be found at "http://www.genuse.tevapharm.com/Documents/Ariba/TC-
+ENGLISH_New.pdf"
+Teva- Hebrew Terms and Conditions can be found at "http://www.genuse.tevapharm.com/Documents/Ariba/TC-
+HEBREW_New.pdf"
+Teva Import - Transportation & Logistics - Guideline can be found at "http://www.genuse.tevapharm.com/Documents
+/Ariba/IMPORT-SUPPLIER-INSTRUCTIONS.pdf"
+Teva Nipendo can be found at "http://www.genuse.tevapharm.com/Documents/Ariba/NIPENDO.pdf"
+
+Teva Bazel 12 
+12 Bazel St.
+4951006 Petah Tikva
+
+ Israel
+  Ship To Code:  IL20_7001
+
+  Phone:  +972 (3) 9267604
+ Email:  Neta.Benshmuel@teva.co.il
+
+ 
+
+Teva Bazel 5  
+5 Bazel St.
+4951033 Petah Tikva
+
+ Israel
+5001
+Send invoices to address indicated in 
+Invoicing Instructions
+
+ 
+
+Rosenberg Neta
+Teva Bazel 12
+
+Line # Part # / Description Type Qty (Unit) Need By Unit Price Subtotal
+
+1
+Not Available     1 31 Mar 2020 $60,000.00 USD $60,000.00 USD
+
+  SIM Software annual license renewal Mar2020– Feb2021
+
+STATUS
+
+SHIP ALL ITEMS TO BILL TO DELIVER TO 
+
+
+
+ 
+
+Sub-total:  $ 60,000.00  USD
+
+ 
+
+1 Confirmed With New Date (Estimated Shipment Date: 1 Mar 2020  Estimated Delivery Date: 1 Mar 2020);
+
+Other Information 
+Amount Based Receiving: Yes
+Req. Line No.: 1
+PR No.: PR798671
+Classification Domain: custom
+Classification Code: L3-030616
+
+Incoterms Information 
+
+Incoterm Code:   (  )DAP Tel Aviv
+
+Order submitted on: Sunday 9 Feb 2020 5:41 AM GMT-08:00
+Received by Ariba Network on: Sunday 9 Feb 2020 5:41 AM GMT-08:00
+This Purchase Order was sent by Teva Pharmaceutical Industries 
+AN01011727393 and delivered by Ariba Network.
+
+PDF generated by Ronald Nathan on Monday 10 Feb 2020 10:49 AM GMT-08:00
+
+
+	Line Items
+	Status
+
+
+
+rpv......... Metadata of the PDF:
+rpv......... date : 2020-02-10T18:49:41Z
+rpv......... pdf:unmappedUnicodeCharsPerPage : 0
+rpv......... pdf:PDFVersion : 1.4
+rpv......... pdf:docinfo:title : 
+rpv......... pdf:hasXFA : false
+rpv......... access_permission:modify_annotations : true
+rpv......... access_permission:can_print_degraded : true
+rpv......... dcterms:created : 2020-02-10T18:49:41Z
+rpv......... Last-Modified : 2020-02-10T18:49:41Z
+rpv......... dcterms:modified : 2020-02-10T18:49:41Z
+rpv......... dc:format : application/pdf; version=1.4
+rpv......... title : 
+rpv......... Last-Save-Date : 2020-02-10T18:49:41Z
+rpv......... access_permission:fill_in_form : true
+rpv......... pdf:docinfo:modified : 2020-02-10T18:49:41Z
+rpv......... meta:save-date : 2020-02-10T18:49:41Z
+rpv......... pdf:encrypted : false
+rpv......... dc:title : 
+rpv......... modified : 2020-02-10T18:49:41Z
+rpv......... pdf:hasMarkedContent : false
+rpv......... Content-Type : application/pdf
+rpv......... meta:creation-date : 2020-02-10T18:49:41Z
+rpv......... created : 2020-02-10T18:49:41Z
+rpv......... access_permission:extract_for_accessibility : true
+rpv......... access_permission:assemble_document : true
+rpv......... xmpTPg:NPages : 3
+rpv......... Creation-Date : 2020-02-10T18:49:41Z
+rpv......... pdf:hasXMP : false
+rpv......... pdf:charsPerPage : 1599
+rpv......... access_permission:extract_content : true
+rpv......... access_permission:can_print : true
+rpv......... producer : iText 2.1.7 by 1T3XT
+rpv......... access_permission:can_modify : true
+rpv......... pdf:docinfo:producer : iText 2.1.7 by 1T3XT
+rpv......... pdf:docinfo:created : 2020-02-10T18:49:41Z
