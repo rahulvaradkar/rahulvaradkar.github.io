@@ -1,0 +1,1810 @@
+package servlets;
+/*
+ *  given a collection  of cells
+    of the form - rowname,columnname,celltype,cellvalue
+    This creates rows and columns and cells
+ */
+import java.io.*;
+import java.util.*;
+import java.util.regex.*;
+import javax.servlet.*;
+import javax.servlet.http.*;
+import com.boardwalk.database.DatabaseLoader;
+import com.boardwalk.exception.*;
+import com.boardwalk.collaboration.CollaborationManager;
+import com.boardwalk.whiteboard.WhiteboardManager;
+import com.boardwalk.database.*;
+import com.boardwalk.table.*;
+import com.boardwalk.user.UserManager;
+import com.boardwalk.excel.*;
+import com.boardwalk.query.*;
+import com.boardwalk.util.*;
+import com.boardwalk.member.Member;
+
+
+import java.util.Date;
+import java.sql.*;                  // JDBC package
+import javax.sql.*;                 // extended JDBC packa
+
+
+public class httpt_vb_createcells
+
+{
+	int    m_tableid;
+	String m_ViewPreference;
+	String m_SortPreference;
+	String m_buffer;
+	Vector  m_cells;
+	Hashtable existingCols;
+	Vector xlRowColCells;
+	StringBuffer xlRowColCellsBuf;
+	Connection connection;
+	StringTokenizer st;
+
+	int userId;
+	String userName;
+	String userPassword;
+	int nhId;
+	int  memberId;
+	String nhName;
+	int transactionId;
+	int rowCount;
+	int columnCount;
+	String m_failureReason = "";
+
+	Vector xlColumns = new Vector();
+	Hashtable xlColumnByAddress = new Hashtable();
+	Hashtable xlColumnById = new Hashtable();
+	Hashtable xlNewColumnById = new Hashtable();
+
+	Vector xlRows = new Vector();
+	Hashtable xlRowByAddress = new Hashtable();
+	Hashtable xlRowById = new Hashtable();
+	Hashtable xlNewRowById = new Hashtable();
+
+	int tid;
+
+	Vector newColumns = new Vector();
+	Vector newRows = new Vector();
+	boolean setDefaultAccess = false;
+
+	boolean isReadOnly = false;
+	// debug info
+	long startTime;
+
+    public httpt_vb_createcells ( String comm_buffer, boolean restrictColumnByDefault)
+    {
+
+		m_buffer = comm_buffer;
+		m_cells = new Vector ();
+		existingCols = new Hashtable();
+		xlRowColCells = new Vector();
+		connection = null;
+		st = new StringTokenizer( m_buffer );
+		//System.out.println(m_buffer);
+		startTime = System.currentTimeMillis();
+		xlRowColCellsBuf = new StringBuffer();
+		setDefaultAccess = restrictColumnByDefault;
+
+    }
+
+	long prevTime = -1;
+    public float getElapsedTime()
+    {
+		if (prevTime == -1)
+			prevTime = System.currentTimeMillis();
+		// Get elapsed time in seconds
+    	float elapsedTimeSec = (System.currentTimeMillis()-prevTime)/1000F;
+
+    	// reset time
+    	prevTime = System.currentTimeMillis();
+
+    	return elapsedTimeSec;
+	}
+
+	public Vector  getNewColumns()
+	{
+		return newColumns;
+	}
+
+	public Vector  getNewRows()
+	{
+		return newRows;
+	}
+
+	public int getTransactionIdForNewCommit()
+	{
+		return tid;
+	}
+
+	public String  getFailureReason()
+	{
+		return m_failureReason;
+	}
+
+
+
+    public boolean  loginUser ()
+    {
+		getElapsedTime();
+
+		String wrkstr;
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		userId = Integer.parseInt(wrkstr);
+
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		userName = wrkstr;
+
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		userPassword = wrkstr;
+
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		memberId = Integer.parseInt(wrkstr);
+
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		nhId = Integer.parseInt(wrkstr);
+
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		nhName =wrkstr;
+
+		//return true;
+
+		System.out.println("User name = " + userName +  " User Id = " + userId + " MemberId " + memberId + "***********");
+
+		Connection connection = null;
+		try
+		{
+			DatabaseLoader databaseloader = new DatabaseLoader(new Properties());
+			connection = databaseloader.getConnection();
+
+			if (  userName == null  || userName == ""  || userPassword ==null || userPassword == "" )
+			{
+				return false;
+			}
+			else
+			{
+
+				Member memberObj = UserManager.authenticateMember(connection, userName,userPassword, memberId);
+
+				if (memberObj == null)
+				{
+					return false;
+				}
+				else
+				{
+					return true;
+				}
+				
+			}
+		}
+		catch ( Exception e )
+		{
+		   e.printStackTrace();
+		   return false;
+		}
+		finally
+		{
+		  try
+		  {
+			connection.close();
+		  }
+		  catch ( SQLException sql )
+		  {
+			sql.printStackTrace();
+			return false;
+		  }
+		    // System.out.println("End loginUser : " + getElapsedTime());
+		}
+	}
+
+
+    public boolean  Parse ()
+    {
+        TransactionManager tm = null;
+        Vector cellsToUpdate = new Vector();
+        Vector rcCellsToUpdate = new Vector();
+        boolean updateDesignValues;
+        updateDesignValues = false;
+        boolean dbTblLockObtained = false;
+        boolean newTable = true;
+
+        boolean canAddRows = false;
+        boolean canDeleteRows = false;
+        boolean canAdministerColumns = false;
+
+
+		Vector xlErrorCells = new Vector();
+		BoardwalkMessages bwMsgs = new BoardwalkMessages();
+
+        try
+        {
+
+			Date d = new Date();
+  			  // System.out.println("Starting the transaction " + d.toString() );
+            DatabaseLoader databaseloader = new DatabaseLoader(new Properties());
+            connection = databaseloader.getConnection();
+
+            String wrkstr;
+
+            wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+            m_tableid = Integer.parseInt(wrkstr);
+      		  // System.out.println("Table Id  " + m_tableid );
+
+            wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+			m_ViewPreference = wrkstr;
+
+			  // System.out.println("m_ViewPreference  " + m_ViewPreference );
+
+		    if ( m_ViewPreference.equals("DESIGN" ) )
+		    {
+		    	updateDesignValues = true;
+			}
+			// see if there is a criterea table associated with this table
+			int criteriaTableId = TableViewManager.getCriteriaTable(connection, m_tableid, userId);
+			System.out.println("Using criterea table id = " + criteriaTableId);
+
+			TableAccessList tbl = null;
+			tbl= TableManager.getTableAccessForMember( connection, memberId, m_tableid);
+			TableAccessRequest tbareq = new TableAccessRequest( m_tableid, m_ViewPreference,true );
+			int requestedACL = tbareq.getACL();
+			int ACLFromDB = tbl.getACL();
+			System.out.println("TB Requested Access");
+			//tbareq.print();
+			System.out.println("DB access Access");
+			//tbl.print();
+
+			canAddRows = tbl.canAddRow();
+			canDeleteRows = tbl.canDeleteRow();
+			canAdministerColumns = tbl.canAdministerColumn();
+
+			int allowedACL = requestedACL & ACLFromDB;
+
+			System.out.println("requestedACL=" + requestedACL);
+			System.out.println("ACLFromDB=" + ACLFromDB);
+			System.out.println("allowedACL=" + allowedACL);
+
+			// proceeed further only if
+			// 1. user has access to write to his view
+			// 2. user has access to add/delete rows/columns
+			if ( allowedACL != requestedACL && canAddRows == false && canDeleteRows == false && canAdministerColumns == false)
+			{
+				BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(10005 );
+				xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  10005, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+				throw new BoardwalkException(12011);
+			}
+
+            getElapsedTime();
+
+
+            wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+			m_SortPreference = wrkstr;
+			  // System.out.println("m_SortPreference  " + m_SortPreference );
+
+			wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+			transactionId =Integer.parseInt(wrkstr);
+
+			System.out.println("Import transactionId = " + transactionId );
+
+			wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+			columnCount =Integer.parseInt(wrkstr);
+
+			  // System.out.println("columnCount  " + columnCount );
+
+			wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+			rowCount =Integer.parseInt(wrkstr);
+
+			  // System.out.println("rowCount  " + rowCount);
+			wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+			System.out.println ("baselineId " + wrkstr);
+
+			HashMap hrcc = null;
+			if ( allowedACL != requestedACL)
+			{
+				isReadOnly = true;
+			}
+			else
+			{
+				//connection.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+				hrcc = TableManager.getRowColumnCellsAtExportForUser(connection, m_tableid, transactionId, userId);
+				//connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+				System.out.println("Time(sec) to get cells by row:column at export for user = " + getElapsedTime());
+			}
+
+			int baselineId = 0;
+			try
+			{
+				baselineId = Integer.parseInt(wrkstr);
+			}
+			catch( Exception e )
+			{
+
+			}
+
+			String exportComment = "Changed content from Excel ";
+			wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+			if (wrkstr != null) {
+					exportComment = wrkstr;
+			}
+			  System.out.println ("Comment " + exportComment);
+
+
+			// parse the columns
+			for ( int colIn = 0; colIn < columnCount; colIn++ )
+			{
+				wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator) ;
+				//System.out.println("Now we will try to breakdown the Col" + wrkstr );
+				xlColumn xlCol = new xlColumn(wrkstr);
+				//xlCol.print();
+				xlColumns.addElement(xlCol);
+				xlColumnByAddress.put( new Integer(xlCol.getColumnAddress()), xlCol);
+				xlColumnById.put( new Integer(xlCol.getId()), xlCol);
+			}
+			  System.out.println("Time(sec) to parse columns = " + getElapsedTime());
+
+			xlRow previousXlrow  = null;
+			// parse the rows
+			for ( int rowIn = 0; rowIn < rowCount; rowIn++ )
+			{
+				wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator) ;
+				//System.out.println("Now we will try to breakdown the Row" + wrkstr );
+				xlRow xlrow = new xlRow(wrkstr);
+				//xlrow.print();
+				xlRows.addElement(xlrow);
+				xlRowByAddress.put( new Integer(xlrow.getRowAddress()), xlrow);
+				xlRowById.put( new Integer(xlrow.getId()), xlrow);
+			}
+			System.out.println("Time(sec) to parse rows = " + getElapsedTime());
+
+
+			TableLockInfo tblock = TableManager.isTableLocked( connection,  m_tableid );
+			if ( tblock.isLocked()  && tblock.getLockedByUserId() != userId )
+			{
+				m_failureReason =  " The table is locked by  " + tblock.getLockedByuser()  + " since " +  tblock.getLockTime();
+				xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12006, "TABLE_LOCKED", m_failureReason ));
+				throw new BoardwalkException(12011);
+
+			}
+
+
+			int numCells = ((rowCount +1) * columnCount) - columnCount;
+
+			getElapsedTime();
+			// Processing Excel columns to see if new columns  need to be created
+/*
+
+			TableColumnInfo tbColInfo = ColumnManager.getTableColumnInfo(
+																connection,
+																m_tableid,
+																-1,
+																userId,
+																memberId,
+																-1,
+																null);
+*/
+			HashMap accCols = ColumnManager.getAccesibleColumns(connection, m_tableid, userId, memberId);
+
+			System.out.println("Time(sec) to getTableColumnInfo() = " + getElapsedTime());
+
+			// let us if there are new columns and if the user has priviliges and if so then are names unique
+
+			System.out.println("can administer column" + canAdministerColumns );
+			if ( canAdministerColumns == false )
+			{
+				for ( int colIndex = 0; colIndex < xlColumns.size(); colIndex++ )
+				{
+					xlColumn xlcol = (xlColumn)xlColumns.elementAt(colIndex);
+					if ( xlcol.getId() == -1 )
+					{
+
+						if ( canAdministerColumns == false )
+						{
+								BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12010 );
+								xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,xlcol.getColumnAddress(),  12010, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+						}
+
+						// check if the name is unique for exisiting and new columns
+						// if so add to the errorvector
+
+					}
+				}
+			}
+
+			if ( xlErrorCells.size() > 0 )
+			{
+				throw new BoardwalkException(12011);
+			}
+
+			// START TRANSACTION ////////////////////////////////////////
+            tm = new TransactionManager(connection, userId);
+            tid = tm.startTransaction(" ", exportComment);
+            /////////////////////////////////////////////////////////////
+			for ( int colIndex = 0; colIndex < xlColumns.size(); colIndex++ )
+			{
+				xlColumn xlcol = (xlColumn)xlColumns.elementAt(colIndex);
+				if ( xlcol.getId() == -1 )
+				{
+
+					System.out.println(" This is  a new column" );
+					if (xlcol.getPreviousColId() == -1 )
+					{
+					  if ( xlcol.getPreviousColumnAddress() == -1 )
+					  {
+						// First Column
+						int after_col_id = -1;
+
+						if ( dbTblLockObtained == false )
+						{
+							try
+							{
+								TableManager.lockTableForUpdate( connection, m_tableid);
+							}
+							catch( SQLException sq)
+							{
+									BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+									xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+									throw new BoardwalkException(12011);
+							}
+							dbTblLockObtained = true;
+						}
+
+						try
+						{
+							int columnId = TableManager.createColumn(connection,
+																	m_tableid,
+																	xlcol.getColumnName(),
+																	xlcol. getType(),
+																	" ",
+																	-1,
+																	1.0,
+																	-1,
+																	"",
+																	-1,
+																	-1,
+																	-1,
+																	-1,
+																	after_col_id,
+																	1,
+																	tid,
+																	setDefaultAccess,
+																	-1
+																	);
+
+							xlcol.setId(columnId);
+							newColumns.addElement(xlcol);
+							xlNewColumnById.put( new Integer(columnId), xlcol );
+						}
+						catch ( Exception e )
+						{
+							// unique column violation
+							BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12001 );
+							xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,xlcol.getColumnAddress(),  12001, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+						}
+					  }
+					  else
+					  {
+
+							// Intermediate column where the previous column is also a new column
+							xlColumn previousCol = (xlColumn)xlColumnByAddress.get( new Integer(xlcol.getPreviousColumnAddress() ));
+							int previousColId = previousCol.getId();
+
+							if ( dbTblLockObtained == false )
+							{
+								try
+								{
+									TableManager.lockTableForUpdate( connection, m_tableid);
+								}
+								catch( SQLException sq)
+								{
+									BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+									xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+									throw new BoardwalkException(12011);
+								}
+								dbTblLockObtained = true;
+							}
+
+							try
+							{
+								int columnId = TableManager.createColumn(connection,
+																			m_tableid,
+																			xlcol.getColumnName(),
+																			xlcol. getType(),
+																			" ",
+																			-1,
+																			1.0,
+																			-1,
+																			"",
+																			-1,
+																			-1,
+																			-1,
+																			-1,
+																			previousColId,
+																			1,
+																			tid,
+																			setDefaultAccess,
+																			-1
+																			);
+
+								xlcol.setId(columnId);
+								newColumns.addElement(xlcol);
+								xlNewColumnById.put( new Integer(columnId), xlcol );
+							}
+							catch ( Exception e )
+							{
+								BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12001 );
+								xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,xlcol.getColumnAddress(),  12001, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+
+							}
+						}
+					}
+					else
+					{
+						// Intermediate column where the previous column is an existing column
+							if ( dbTblLockObtained == false )
+							{
+
+											try
+											{
+													TableManager.lockTableForUpdate( connection, m_tableid);
+											}
+											catch( SQLException sq)
+											{
+													m_failureReason =  " The table is being updated by a different user, please try momentarily";
+													  // System.out.println(m_failureReason);
+													tm.rollbackTransaction();
+													return false;
+											}
+									dbTblLockObtained = true;
+							}
+
+
+						try
+						{
+							int columnId = TableManager.createColumn(connection,
+																  m_tableid,
+																 xlcol.getColumnName(),
+																 xlcol. getType(),
+																  " ",
+																  -1,
+																  1.0,
+																  -1,
+																  "",
+																  -1,
+																  -1,
+																  -1,
+																	-1,
+																  xlcol.getPreviousColId(),
+																  1,
+																  tid,
+																  setDefaultAccess,
+																  -1 // source column
+																);
+
+							xlcol.setId(columnId);
+							newColumns.addElement(xlcol);
+							xlNewColumnById.put( new Integer(columnId), xlcol );
+						}
+						catch ( Exception e )
+						{
+								BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12001 );
+								xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,xlcol.getColumnAddress(),  12001, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+						}
+
+					}
+
+				}
+				else
+				{
+						newTable = false;
+				}
+			}
+
+			if ( xlErrorCells.size() > 0 )
+			{
+					throw new BoardwalkException(12011);
+			}
+
+			Iterator nci = newColumns.iterator();
+			while(nci.hasNext())
+			{
+				int refcolid = -1;
+				xlColumn xlc = (xlColumn)nci.next();
+				int colnum = xlc.getColumnAddress();
+				int prevcolnum = xlc.getPreviousColumnAddress();
+				if (prevcolnum == -1)
+					continue;
+				if (prevcolnum == colnum -1)
+				{
+					xlColumn xlcprev =
+						(xlColumn)xlColumnByAddress.get(new Integer(colnum-1));
+					refcolid = xlcprev.getId();
+				}
+				else
+				{
+					xlColumn xlcnext =
+						(xlColumn)xlColumnByAddress.get(new Integer(colnum+1));
+					if (xlcnext == null)
+						continue;
+					int nextcolnum = xlcnext.getColumnAddress();
+					if (nextcolnum == colnum + 1)
+					{
+						refcolid = xlcnext.getId();
+					}
+				}
+
+				if (refcolid != -1)
+				{
+					// update the source id
+					String upd_sql_str = "UPDATE BW_COLUMN SET SOURCE=? WHERE ID=" + xlc.getId();
+					CallableStatement updsrcstmt = null;
+					try {
+						updsrcstmt = connection.prepareCall(upd_sql_str);
+						updsrcstmt.setInt(1, refcolid);
+						updsrcstmt.executeUpdate();
+					} catch (SQLException sql1) {
+						throw new SystemException(sql1);
+					} finally {
+						try {
+							updsrcstmt.close();
+						} catch (SQLException sql2) {
+							throw new SystemException(sql2);
+						}
+					}
+				}
+			}
+			System.out.println("Time(sec) to create columns = " + getElapsedTime());
+
+			boolean status = false;
+			if (newTable == true)
+			{
+				  // System.out.println("Creating rows for new table");
+				if ( dbTblLockObtained == false )
+				{
+					try
+					{
+							TableManager.lockTableForUpdate( connection, m_tableid);
+					}
+					catch( SQLException sq)
+					{
+
+							BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+							xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+							throw new BoardwalkException(12011);
+					}
+					dbTblLockObtained = true;
+				}
+
+				TableManager.createRowsNewTable(connection,
+												m_tableid,
+												tid,
+												userId,
+												xlRows);
+				System.out.println("Time(sec) to create rows = " + getElapsedTime());
+
+				  // System.out.println("Fetching created rows for new table");
+				// fetch the new rows back
+				String q1 = "select id, sequence_number from bw_row where bw_row.bw_tbl_id = ?";
+
+				PreparedStatement preparedstatement = null;
+				ResultSet resultset_r = null;
+				Vector drv = new Vector();
+				try
+				{
+					preparedstatement = connection.prepareStatement(q1);
+					preparedstatement.setInt(1,m_tableid);
+					resultset_r = preparedstatement.executeQuery();
+
+					while ( resultset_r.next() )
+					{
+						int rid = resultset_r.getInt("ID");
+						float seq = resultset_r.getFloat("SEQUENCE_NUMBER");
+
+						Float f = new Float (seq); // since we set the seq number as row address
+						xlRow xlr = (xlRow)xlRowByAddress.get(new Integer(f.intValue()));
+						xlr.setId(rid);
+						newRows.addElement(xlr);
+						xlNewRowById.put(new Integer(rid),  xlr );
+
+					}
+				}
+				catch (Exception e)
+				{
+					e.printStackTrace();
+					tm.rollbackTransaction();
+					return false;
+				}
+				finally
+				{
+					if (preparedstatement != null)
+						preparedstatement.close();
+				}
+				System.out.println("Time(sec) to fetch back rows = " + getElapsedTime());
+			}
+			else // newTable == false so it is an existing table
+			{
+				// Processing Excel rows to see if new rows need to be created
+
+				if ( canAddRows == false )
+				{
+					for ( int rowIndex = 0; rowIndex < xlRows.size(); rowIndex++ )
+					{
+						xlRow xlrow = (xlRow)xlRows.elementAt(rowIndex);
+
+						if ( xlrow.getId() == -1 )
+						{
+							BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12012 );
+							xlErrorCells.add( new xlError( m_tableid,-1,xlrow.getRowAddress(),-1,-1,  12012, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+							System.out.println("No access to add rows");
+							throw new BoardwalkException(12011);
+						}
+					}
+				}
+
+				if ( xlErrorCells.size() > 0 )
+				{
+					throw new BoardwalkException(12011);
+				}
+
+
+				// if user has access then  let us move forward...
+
+				for ( int rowIndex = 0; rowIndex < xlRows.size(); rowIndex++ )
+				{
+					xlRow xlrow = (xlRow)xlRows.elementAt(rowIndex);
+
+					if ( xlrow.getId() == -1 )
+					{
+						if (xlrow.getPreviousRowId() == -1 )
+						{
+							  // System.out.println(" The previous row is  a new row or this is a top row " );
+
+							  if ( xlrow.getPreviousRowAddress() == -1 )
+							  {
+									  // Top most row
+										int rowId = -1;
+										int after_row_id = -1;
+
+										if ( m_ViewPreference.equals( ViewPreferenceType.MY_ROWS) )
+										{
+											  // System.out.println(" Calling getAfterRowIdforMyRows " );
+											if ( dbTblLockObtained == false )
+											{
+													try
+													{
+															TableManager.lockTableForUpdate( connection, m_tableid);
+													}
+													catch( SQLException sq)
+													{
+
+																BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+																xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+																throw new BoardwalkException(12011);
+													}
+													dbTblLockObtained = true;
+											}
+											after_row_id = TableManager.getAfterRowIdforMyRows( connection,
+																								m_tableid,
+																								userId );
+										}
+										else
+										if ( m_ViewPreference.equals( ViewPreferenceType.LATEST_ROWS_OF_ALL_USERS_IN_MY_NH) )
+										{
+												  // System.out.println(" Calling getAfterRowIdforMyGroupRows " );
+												if ( dbTblLockObtained == false )
+													{
+															try
+															{
+																	TableManager.lockTableForUpdate( connection, m_tableid);
+															}
+															catch( SQLException sq)
+															{
+																BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+																xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+																throw new BoardwalkException(12011);
+
+															}
+															dbTblLockObtained = true;
+													}
+												after_row_id = TableManager.getAfterRowIdforMyGroupRows( connection,m_tableid,nhId );
+										}
+										else
+										if ( m_ViewPreference.equals( ViewPreferenceType.LATEST_ROWS_OF_ALL_USERS_IN_MY_NH_AND_IMM_CHD) )
+										{
+												  // System.out.println(" Calling getAfterRowIdforMyGroupAndChildrenRows " );
+												if ( dbTblLockObtained == false )
+												{
+														try
+														{
+																TableManager.lockTableForUpdate( connection, m_tableid);
+														}
+														catch( SQLException sq)
+														{
+
+																	BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+																	xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+																	throw new BoardwalkException(12011);
+
+														}
+														dbTblLockObtained = true;
+													}
+												after_row_id = TableManager.getAfterRowIdforMyGroupAndChildrenRows( connection,m_tableid,nhId );
+										}
+										else
+										if ( m_ViewPreference.equals( ViewPreferenceType.LATEST_ROWS_OF_ALL_USERS_IN_MY_NH_AND_ALL_CHD) )
+										{
+												  // System.out.println(" Calling getAfterRowIdforMyGroupAndAllChildrenRows " );
+												if ( dbTblLockObtained == false )
+													{
+															try
+															{
+																	TableManager.lockTableForUpdate( connection, m_tableid);
+															}
+															catch( SQLException sq)
+															{
+
+																	BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+																	xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+																	throw new BoardwalkException(12011);
+															}
+															dbTblLockObtained = true;
+													}
+												after_row_id = TableManager.getAfterRowIdforMyGroupAndAllChildrenRows( connection,m_tableid,nhId );
+										}
+
+
+										  // System.out.println(" Creating a row after  " +after_row_id+ " for " + xlrow.getRowAddress()+tid);
+										if ( dbTblLockObtained == false )
+										{
+												try
+												{
+														TableManager.lockTableForUpdate( connection, m_tableid);
+												}
+												catch( SQLException sq)
+												{
+
+														BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+														xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+														throw new BoardwalkException(12011);
+												}
+												dbTblLockObtained = true;
+										}
+
+										rowId = TableManager.createRowA(	connection,
+																			m_tableid,
+																			xlrow.getRowAddress()+tid+"",
+																			after_row_id,
+																			tid
+																												  );
+									    // System.out.println(" Server::Created a new row " + xlrow.getRowAddress() + " new rowid = " + rowId);
+									  xlrow.setId(rowId);
+									  newRows.addElement(xlrow);
+									  xlNewRowById.put( new Integer(rowId), xlrow );
+
+							  }
+							  else
+							  {
+
+									// Intermediate row where the previous row is also a new row
+									xlRow previousRow = (xlRow)xlRowByAddress.get( new Integer(xlrow.getPreviousRowAddress() ));
+									int previousRowId = previousRow.getId();
+									int rowId = -1;
+									if ( dbTblLockObtained == false )
+									{
+											try
+											{
+													TableManager.lockTableForUpdate( connection, m_tableid);
+											}
+											catch( SQLException sq)
+											{
+
+													BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+													xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+													throw new BoardwalkException(12011);
+											}
+											dbTblLockObtained = true;
+									}
+									rowId = TableManager.createRowA(	connection,
+																		m_tableid,
+																		xlrow.getRowAddress()+tid+"",
+																		previousRowId,
+																		tid
+																	  );
+									  // System.out.println(" Server::Created a new row " + xlrow.getRowAddress() + " new rowid = " + rowId);
+									xlrow.setId(rowId);
+									newRows.addElement(xlrow);
+									xlNewRowById.put(new Integer(rowId),  xlrow );
+							  }
+						}
+						else
+						{
+							// Intermediate row where the previous row is an existing row
+							int rowId = -1;
+							if ( dbTblLockObtained == false )
+							{
+									try
+									{
+											TableManager.lockTableForUpdate( connection, m_tableid);
+									}
+									catch( SQLException sq)
+									{
+
+											BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12008 );
+											xlErrorCells.add( new xlError( m_tableid,-1,-1,-1,-1,  12008, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+											throw new BoardwalkException(12011);
+									}
+									dbTblLockObtained = true;
+							}
+
+							rowId = TableManager.createRowA(	connection,
+																m_tableid,
+																xlrow.getRowAddress()+tid+"",
+																xlrow.getPreviousRowId(),
+																tid
+															  );
+							  // System.out.println(" Server::Created a new row " + xlrow.getRowAddress() + " new rowid = " + rowId);
+							xlrow.setId(rowId);
+							newRows.addElement(xlrow);
+							xlNewRowById.put(new Integer(rowId),  xlrow );
+						}
+
+					}
+				}
+				System.out.println("Time(sec) to create rows = " + getElapsedTime());
+			}
+
+			if ( newTable == false )
+			{
+				String getRowset ="SELECT r.ROWID, r.TX_ID, r.OWNER_ID, r.OWNER_TID FROM BW_GetConsolidationRowSet (?, ?, ?, ?) as r, BW_ROW WHERE BW_ROW.ID = r.ROWID AND BW_ROW.IS_ACTIVE = 1";
+				if (criteriaTableId > 0)
+				{
+					String rowQuery = TableViewManager.getRowQuery(connection, m_tableid, userId, criteriaTableId, true);
+					if (rowQuery != null)
+					{
+						getRowset = "SELECT BW_ROW.ID AS ROWID, BW_ROW.TX_ID, BW_ROW.OWNER_ID, BW_ROW.OWNER_TID FROM " +
+									"(" + rowQuery + ") AS R " +
+									" , BW_ROW " +
+									" WHERE BW_ROW.ID = R.ID AND BW_ROW.IS_ACTIVE = 1";
+					}
+				}
+				PreparedStatement preparedstatement = null;
+				ResultSet resultset_r = null;
+				Vector drv = new Vector();
+				try
+				{
+					preparedstatement = connection.prepareStatement(getRowset);
+					if (criteriaTableId == -1)
+					{
+						preparedstatement.setInt(1, m_tableid);
+						preparedstatement.setInt(2, userId);
+						preparedstatement.setInt(3, nhId);
+						preparedstatement.setString(4, m_ViewPreference);
+					}
+
+					resultset_r = preparedstatement.executeQuery();
+
+					while ( resultset_r.next() )
+					{
+						int rid = resultset_r.getInt("ROWID");
+						int rtxid = resultset_r.getInt("TX_ID");
+						int roid = resultset_r.getInt("OWNER_ID");
+						int rotid = resultset_r.getInt("OWNER_TID");
+
+						if ( xlRowById.get(new Integer(rid)) == null  )
+						{
+							if (xlNewRowById.get(new Integer(rid)) == null  )
+							{
+								// A server row is not in Excel buffer
+								//System.out.println("svr row id  = " + rid+  " not in excel buffer " );
+
+								if ( m_ViewPreference.equals( ViewPreferenceType.MY_ROWS) )
+								{
+									  if (  roid == userId &&  rotid <=  transactionId )
+										{
+												// this row was owned by me and was present and under my ownership when I did my last import
+												drv.addElement(new Integer( rid ));
+										}
+
+								}
+								else  // any other view
+								{
+										if ( rtxid <= transactionId  )
+										{
+												// This row was  created before the last import
+												drv.addElement(new Integer( rid ));
+										}
+								}
+							}
+						}
+					}
+
+
+				}
+				catch (Exception e)
+				{
+					e.printStackTrace();
+					tm.rollbackTransaction();
+					return false;
+				}
+				finally
+				{
+					if (preparedstatement != null)
+						preparedstatement.close();
+
+				}
+
+				if (drv != null && drv.size() > 0)
+				{
+
+					/// check for delete row privliges
+					if ( canDeleteRows == false )
+					{
+						for (int dri = 0; dri < drv.size(); dri++)
+						{
+							int drid = ((Integer)drv.elementAt(dri)).intValue();
+
+							xlRow excelRow = (xlRow)xlRowById.get(new Integer(drid));
+
+							// System.out.println("&&&&&&&&&&&&&&&&&&&&&delete row" + drid );
+
+							BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12013 );
+
+							xlErrorCells.add( new xlError( m_tableid,drid,-1,-1,-1,  12013, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution() + ", You can't deactivate this row "));
+
+							throw new BoardwalkException(12011);
+						}
+					}
+					else
+					{
+						RowManager.deactivateRows(connection, drv, tid);
+					}
+				}
+/*
+				for (int dri = 0; dri < drv.size(); dri++)
+				{
+					if ( canDeleteRows == false )
+					{
+						int drid = ((Integer)drv.elementAt(dri)).intValue();
+
+						xlRow excelRow = (xlRow)xlRowById.get(new Integer(drid));
+
+						// System.out.println("&&&&&&&&&&&&&&&&&&&&&delete row" + drid );
+
+						BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12013 );
+
+						xlErrorCells.add( new xlError( m_tableid,drid,-1,-1,-1,  12013, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution() + ", You can't deactivate this row "));
+
+						throw new BoardwalkException(12011);
+					}
+					else
+					{
+						int drid = ((Integer)drv.elementAt(dri)).intValue();
+						  // System.out.println("Deactivating the  Row  " + " id= " + drid );
+						RowManager.deactivateRow(connection, drid, tid);
+					}
+				}
+*/
+				if ( xlErrorCells.size() > 0 )
+				{
+						throw new BoardwalkException(12011);
+				}
+				System.out.println("Time(sec) to deactivate rows = " + getElapsedTime());
+			}
+
+			// parse the cells here because the rows and columns have been now created and rowids and colids are assigned to rownum and colnum
+			try
+			{
+				wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator) ;
+
+			}
+			catch ( NoSuchElementException e )
+			{
+				wrkstr = null;
+			}
+
+			  // System.out.println("no of cells " + numCells);
+			for (int iCellCtr = 0 ; iCellCtr < numCells; iCellCtr++)
+			{
+				// this populates xlRowColCells
+				if ( parseCellBufferString ( wrkstr ) == -1 )
+					return false;
+				try
+				{
+						wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator) ;
+						  // System.out.println("Now we will try to breakdown the cell " + wrkstr );
+				} catch ( NoSuchElementException e )
+				{
+					wrkstr = null;
+				}
+
+			}
+			// remove the last '@'
+			//xlRowColCellsBuf.deleteCharAt(xlRowColCellsBuf.length() - 1);
+
+			System.out.println("Time(sec) to parse cells = " + getElapsedTime());
+
+			//PrintWriter cellOut = new PrintWriter(new FileOutputStream("c:\\cell"/*+m_tableid*/+".txt"));
+			//cellOut.println(xlRowColCellsBuf.toString());
+			//cellOut.close();
+
+			//TableManager.exportCells(connection, m_tableid, transactionId, userId, tid );
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////
+			if (newTable == true)
+			{
+				TableManager.createCellsNewTable(connection, xlRowColCells, tid);
+			}
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////
+			else
+			{
+/*
+				// TableColumnInfo tblColumnInfo = TableManager.getTableColumnInfo( connection, m_tableid, -1 );
+
+				Hashtable originalCells =  null;
+				Hashtable originalCellsAtLastExport = null;
+				  // System.out.println("getCellVersions AT LAST IMPORT with tid = "+ transactionId+ " for table = " + m_tableid);
+				originalCells =  QueryManager.getCellVersions( connection, transactionId, m_tableid);
+				  // System.out.println("done getCellVersions AT LAST IMPORT " + originalCells);
+				System.out.println("Time(sec) to get cells at last import = " + getElapsedTime());
+
+				  // System.out.println("getCellVersionsAtCellExport ");
+				originalCellsAtLastExport =  QueryManager.getCellVersionsAtCellExport_sarang( connection, transactionId, m_tableid, userId );
+				  // System.out.println(" done getCellVersionsAtCellExport " + originalCellsAtLastExport);
+				System.out.println("Time(sec) to get cells at last export = " + getElapsedTime());
+
+
+				HashMap hrcc =  null;
+				//Enumeration keys = null;
+				  // System.out.println("getRowColumnCells ");
+				hrcc = TableManager.getRowColumnCells(connection, m_tableid, userId, true, -1);
+				  // System.out.println("done gettting RowColumnCells " + hrcc);
+				//keys = hrcc.keys();
+				System.out.println("Time(sec) to get cells by row:column = " + getElapsedTime());
+
+*/
+
+				//HashMap hrcc = TableManager.getRowColumnCellsAtExportForUser(connection, m_tableid, transactionId, userId);
+				//System.out.println("Time(sec) to get cells by row:column at export for user = " + getElapsedTime());
+				Iterator xlrcci = xlRowColCells.iterator();
+
+
+
+
+				// go through the list of cells Excel has sent
+				while(xlrcci.hasNext())
+				{
+					RowColumnCell xlrcc = (RowColumnCell)xlrcci.next();
+
+
+					//get the equivalent server cell
+					Cell rcc = (Cell)hrcc.get(new String(""+xlrcc.getRowId()+":"+xlrcc.getColumnId()));
+
+
+					if ( rcc != null )
+					{
+						if ( newTable == false )
+						{
+							  // System.out.println("excel key = " + xlrcc.getRowId()+xlrcc.getColumnId() );
+							String excelCellvalue = xlrcc.getValueAsString();
+							String serverCellvalue =rcc.getValueAsString();
+							String excelCellFormula = xlrcc.getFormula();
+							String serverCellFormula = rcc.getFormula();
+
+							//System.out.println("DKD Checking cell for excel row " + xlrcc.getRowId() + " and column "  + xlrcc.getColumnId() + " excel cell:" + excelCellvalue + ":server cell value:" + serverCellvalue+":excelCellFormula:" + excelCellFormula+":" +":serverCellFormula:" + serverCellFormula+":");
+
+							boolean sameNumericValue  = false;
+							boolean sameValueButDiffFormulae = false;
+							try
+							{
+								Double xlDbl = new Double(excelCellvalue);
+								Double svrDbl = new Double(serverCellvalue);
+								if ( xlDbl.compareTo(svrDbl) == 0 )
+								{
+									if ( excelCellFormula.equals(serverCellFormula) )
+									{
+										sameNumericValue = true;
+									}
+									else
+									{
+										sameValueButDiffFormulae = true;
+									}
+								}
+							}
+							catch( NumberFormatException nfe )
+							{
+
+							}
+
+							if(  sameNumericValue == false && ( !excelCellvalue.equals(serverCellvalue) || !excelCellFormula.equals(serverCellFormula) ) )
+							{
+								// check whether the column is restricted
+								int cColId = xlrcc.getColumnId();
+								Integer colacc = (Integer)accCols.get(new Integer(cColId));
+								//Column cCol = (Column)tbColInfo.getColumnHash().get(new Integer(cColId));
+
+								boolean newCell = false;
+								newCell =
+									xlNewColumnById.get(new Integer(xlrcc.getColumnId()))==null &&
+									xlNewRowById.get(new Integer(xlrcc.getRowId()))==null?false:true;
+								// it is not an error to update the cell in a read only column
+								// if the cell is a new cell, i.e it was created as a result of creating
+								// a new column or row (which the user has access to create)
+								if(!excelCellvalue.equals(serverCellvalue) && excelCellFormula.equals(serverCellFormula) && serverCellFormula.indexOf("=") > -1 )
+								{
+									// the value is diff but the formulae is the same then it si ok to update the cell..
+									//System.out.println("DKD Checking cell for excel row " + xlrcc.getRowId() + " and column "  + xlrcc.getColumnId() + " excel cell:" + excelCellvalue + ":server cell value:" + serverCellvalue+":excelCellFormula:" + excelCellFormula+":" +":serverCellFormula:" + serverCellFormula+":");
+								}
+								else
+								{
+									if (colacc != null && colacc.intValue() < 2 && newCell == false) // read only or no access and not a new column
+									{
+
+
+										if ( sameNumericValue == false )
+										{
+											System.out.println( excelCellvalue );
+											System.out.println( serverCellvalue );
+											System.out.println( excelCellFormula );
+											System.out.println( serverCellFormula );
+											System.out.println( serverCellFormula.indexOf("=") );
+
+
+											if ( sameValueButDiffFormulae == true && serverCellFormula.indexOf("=") < 0 &&  !excelCellFormula.equals(serverCellFormula) )
+											{
+												// allow use to set initial formulae and then the locks apply...
+
+											}
+											else
+											{
+												System.out.println("updated readonly cells orig value=" + serverCellvalue + ":newvalue="+ excelCellvalue+":" );
+												Cell errorServerCell = (Cell)hrcc.get(new String(""+xlrcc.getRowId()+":"+xlrcc.getColumnId()));
+												xlRow excelRow = (xlRow)xlRowById.get(new Integer(xlrcc.getRowId()));
+												if (excelRow == null)
+												{
+													excelRow = (xlRow)xlNewRowById.get(new Integer(xlrcc.getRowId()));
+												}
+												xlColumn excelColumn = (xlColumn)xlColumnById.get(new Integer(xlrcc.getColumnId()));
+												if (excelColumn == null)
+												{
+													excelColumn = (xlColumn)xlNewColumnById.get(new Integer(xlrcc.getColumnId()));
+												}
+												BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12014 );
+												//xlErrorCells.add( new xlError( m_tableid,xlrcc.getRowId(),excelRow!=null?excelRow.getRowAddress():-1,xlrcc.getColumnId(),excelColumn!=null?excelColumn.getColumnAddress():-1,12014, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + ", Change the value back to " + serverCellvalue ));
+												continue;
+											}
+										}
+									}
+								}
+
+								xlrcc.setId( rcc.getId() );
+								xlrcc.setType( rcc.getType() );
+								cellsToUpdate.addElement(xlrcc);
+
+/*
+								// import cell value
+								OriginalCell orCell = (OriginalCell)originalCells.get( new Integer( rcc.getId() ) );
+								// export cell value
+								OriginalCell orExportCell = (OriginalCell)originalCellsAtLastExport.get( new Integer( rcc.getId() ) );
+
+								if ( orCell != null )
+								{
+								//	orCell.printCell();
+									if ( 	orExportCell != null )
+									{
+										//orExportCell.printCell();
+										if ( orExportCell.getTransactionId() >= orCell.getTransactionId() )
+										{
+											if ( ! orExportCell.getValueAsString().equals( excelCellvalue )    )
+											{
+												  // System.out.println(" export cell tid > original cell tid && excel value diff then last export value for the user ");
+												xlrcc.setId( rcc.getId() );
+												try
+												{
+														xlrcc.setType( rcc.getType() );
+														cellsToUpdate.addElement(xlrcc);
+												}
+												catch( java.lang.NumberFormatException ne )
+												{
+													// capture the error
+													Cell errorServerCell = (Cell)hrcc.get(new String(""+xlrcc.getRowId()+":"+xlrcc.getColumnId()));
+													xlRow excelRow = (xlRow)xlRowById.get(new Integer(xlrcc.getRowId()));
+													xlColumn excelColumn = (xlColumn)xlColumnById.get(new Integer(xlrcc.getColumnId()));
+													BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12004 );
+													xlErrorCells.add( new xlError( m_tableid,xlrcc.getRowId(),excelRow.getRowAddress(),xlrcc.getColumnId(),excelColumn.getColumnAddress(),12004, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution() + ", Correct datatype is " + errorServerCell.getType() ));
+
+												}
+
+											}
+											else
+											{
+												  // System.out.println("not updating::: export cell value is same as  excel value");
+											}
+
+										}
+										else
+										{
+											if (  ! orCell.getValueAsString().equals( excelCellvalue )    )
+											{
+												  // System.out.println(" export cell tid< original cell tid && excel value diff then last import  value for the user ");
+												xlrcc.setId( rcc.getId() );
+												try
+												{
+														xlrcc.setType( rcc.getType() );
+														cellsToUpdate.addElement(xlrcc);
+												}
+												catch( java.lang.NumberFormatException ne )
+												{
+														// capture the error
+														Cell errorServerCell = (Cell)hrcc.get(new String(""+xlrcc.getRowId()+":"+xlrcc.getColumnId()));
+														xlRow excelRow = (xlRow)xlRowById.get(new Integer(xlrcc.getRowId()));
+														xlColumn excelColumn = (xlColumn)xlColumnById.get(new Integer(xlrcc.getColumnId()));
+														BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12004 );
+														xlErrorCells.add( new xlError( m_tableid,xlrcc.getRowId(),excelRow.getRowAddress(),xlrcc.getColumnId(),excelColumn.getColumnAddress(),12004, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution() + ", Correct datatype is " + errorServerCell.getType() ));
+												}
+											}
+											else
+											{
+												  // System.out.println("not updating::: export cell value is same as  excel value");
+											}
+										}
+									} // cell was exported by user before
+									else // means user imported and this is first export after that
+									{
+										if (  ! orCell.getValueAsString().equals( excelCellvalue )    )
+										{
+											  // System.out.println("updating cell : exporting this cell without ever importing and the value is different from the last exported value");
+											  // System.out.println(" export value is null and excel value has changed from last import so we add to update list  ");
+											xlrcc.setId( rcc.getId() );
+											try
+											{
+												xlrcc.setType( rcc.getType() );
+												cellsToUpdate.addElement(xlrcc);
+											}
+											catch( java.lang.NumberFormatException ne )
+											{
+												// capture the error
+												Cell errorServerCell = (Cell)hrcc.get(new String(""+xlrcc.getRowId()+":"+xlrcc.getColumnId()));
+												xlRow excelRow = (xlRow)xlRowById.get(new Integer(xlrcc.getRowId()));
+												xlColumn excelColumn = (xlColumn)xlColumnById.get(new Integer(xlrcc.getColumnId()));
+												BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12004 );
+												xlErrorCells.add( new xlError( m_tableid,xlrcc.getRowId(),excelRow.getRowAddress(),xlrcc.getColumnId(),excelColumn.getColumnAddress(),12004, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution() + ", Correct datatype is " + errorServerCell.getType() ));
+
+											}
+										}
+									}
+								} // if the user imported the cell once
+								else // looks like he freshly exported it, so lets allow him to update it
+								{
+									  // System.out.println(" OrginialCell is null");
+									xlrcc.setId( rcc.getId() );
+									try
+									{
+										xlrcc.setType( rcc.getType() );
+										cellsToUpdate.addElement(xlrcc);
+									}
+									catch( java.lang.NumberFormatException ne )
+									{
+										// capture the error
+										Cell errorServerCell = (Cell)hrcc.get(new String(""+xlrcc.getRowId()+":"+xlrcc.getColumnId()));
+										xlRow excelRow = (xlRow)xlRowById.get(new Integer(xlrcc.getRowId()));
+										xlColumn excelColumn = (xlColumn)xlColumnById.get(new Integer(xlrcc.getColumnId()));
+										BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12004 );
+										xlErrorCells.add( new xlError( m_tableid,xlrcc.getRowId(),excelRow.getRowAddress(),xlrcc.getColumnId(),excelColumn.getColumnAddress(),12004, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution() + ", Correct datatype is " + errorServerCell.getType() ));
+
+									}
+								}
+*/
+							} // xl cell value is different from server
+						}
+						else // for new table
+						{
+							  // System.out.println(" it is a new table add the cell");
+							xlrcc.setId( rcc.getId() );
+							try
+							{
+								xlrcc.setType( rcc.getType() );
+								cellsToUpdate.addElement(xlrcc);
+							}
+							catch( java.lang.NumberFormatException ne )
+							{
+								// capture the error
+								Cell errorServerCell = (Cell)hrcc.get(new String(""+xlrcc.getRowId()+":"+xlrcc.getColumnId()));
+								xlRow excelRow = (xlRow)xlRowById.get(new Integer(xlrcc.getRowId()));
+								xlColumn excelColumn = (xlColumn)xlColumnById.get(new Integer(xlrcc.getColumnId()));
+								BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(12004 );
+								xlErrorCells.add( new xlError( m_tableid,xlrcc.getRowId(),excelRow.getRowAddress(),xlrcc.getColumnId(),excelColumn.getColumnAddress(),12004, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution() + ", Correct datatype is " + errorServerCell.getType() ));
+							}
+						}
+					} // rcc is null
+					else
+					{
+						// update the cell if it is in newly added rows and columns
+						if (xlNewRowById.get(new Integer(xlrcc.getRowId())) != null ||
+						    xlNewColumnById.get(new Integer(xlrcc.getColumnId())) != null)
+						{
+							// cellsToUpdate.addElement(xlrcc);
+							rcCellsToUpdate.addElement(xlrcc);
+							System.out.println("Updating cell for new row or column");
+
+					    }
+					    //System.out.println(" not updating:::  row on server has been deleted thus no updates  is null");
+					}
+				} // while loop
+
+				System.out.println("Time(sec) to compare values of cells between excel and server = " + getElapsedTime());
+
+				if ( cellsToUpdate.size() > 0 && xlErrorCells.size() < 1 )
+				{
+					System.out.println("Updating " + cellsToUpdate.size()  + " cells" );
+					TableManager.commitExcelCellsByCellId(connection, tid, cellsToUpdate, updateDesignValues);
+					// System.out.println("done updating " + cellsToUpdate.size()  + " cells " );
+				}
+				else
+				{
+					if ( xlErrorCells.size() > 0 )
+					{
+						  // System.out.println( " number of error cells " +  xlErrorCells.size()  );
+						throw new BoardwalkException(12011);
+					}
+				}
+				// cells for new rows and columns
+				if ( rcCellsToUpdate.size() > 0 && xlErrorCells.size() < 1 )
+				{
+					//System.out.println("updating " + rcCellsToUpdate.size()  + " cells for new rows and columns " );
+					TableManager.commitCellsByRowAndColumn(connection,
+															tid,
+															rcCellsToUpdate,
+															updateDesignValues  );
+					// System.out.println("done updating " + cellsToUpdate.size()  + " cells " );
+				}
+				else
+				{
+					if ( xlErrorCells.size() > 0 )
+					{
+						  // System.out.println( " number of error cells " +  xlErrorCells.size()  );
+						throw new BoardwalkException(12011);
+					}
+				}
+			}
+
+			//////////////////////////////////////////////////////////////////////////////////////////////////////////
+			tm.commitTransaction();
+			//tm.rollbackTransaction();
+			System.out.println("Time(sec) to commit cells to server = " + getElapsedTime());
+			System.out.println("Total time to update database : " + (System.currentTimeMillis()-startTime)/1000F);
+			return true;
+		}
+		catch ( BoardwalkException bwe )
+		{
+
+			if ( bwe.getErrorCode() == 12011 && xlErrorCells.size() > 0 )
+			{
+					StringBuffer  errorBuffer  = new StringBuffer();
+
+					for ( int errorIndex = 0; errorIndex< xlErrorCells.size(); errorIndex++ )
+					{
+						xlError excelError = (xlError)(xlErrorCells.elementAt(errorIndex));
+						errorBuffer.append( excelError.buildTokenString() );
+					}
+					errorBuffer.append( Constants.Seperator );
+					m_failureReason =  errorBuffer.toString();
+					System.out.println(m_failureReason);
+					try
+					{
+						if ( tm != null )
+						{
+							tm.rollbackTransaction();
+						}
+						return false;
+					}
+					catch (Exception e)
+					{
+						e.printStackTrace();
+						return false;
+					}
+
+			}
+			else
+			{
+
+					m_failureReason =  bwe.getMessage() + ", " + bwe.getPotentialSolution();
+					  // System.out.println(m_failureReason);
+					try
+					{
+						  // System.out.println(m_failureReason);
+						if ( tm != null )
+						{
+							tm.rollbackTransaction();
+						}
+						return false;
+					} catch (Exception e)
+					{
+						e.printStackTrace();
+						return false;
+					}
+			}
+
+		}
+		catch( SQLException sqe )
+		{
+			sqe.printStackTrace();
+			  // System.out.println("sqlexception:::::::;;"+sqe.getErrorCode() );
+			SQLException nsqe = sqe.getNextException();
+			while( nsqe != null )
+			{
+				  // System.out.println("NEXT sqlexception:::::::;;"+nsqe.getErrorCode() );
+				nsqe.printStackTrace();
+				nsqe = sqe.getNextException();
+			}
+			try
+			{
+				m_failureReason =  " The system  is busy, please try momentarily";
+				  // System.out.println(m_failureReason);
+				tm.rollbackTransaction();
+				return false;
+			} catch (Exception e)
+			{
+				e.printStackTrace();
+				return false;
+			}
+		}
+		catch ( Exception e1 )
+		{
+			e1.printStackTrace();
+			try
+			{
+
+				tm.rollbackTransaction();
+			} catch (Exception e)
+			{
+				e.printStackTrace();
+				return false;
+			}
+			e1.printStackTrace();
+			return false;
+		}
+		finally
+		{
+			try
+			{
+				connection.close();
+			}
+			catch ( SQLException sql )
+			{
+				sql.printStackTrace();
+			}
+		}
+	}
+
+    public int parseCellBufferString ( String s ) throws SQLException
+    {
+		//System.out.println("Now Parsing Cell Contents ::: " + s);
+		StringTokenizer st = new StringTokenizer ( s);
+		boolean newCell = false;
+		String rowaddress = st.nextToken (httpt_vb_MyCollaborations.ContentDelimeter);
+		String xlrowId = st.nextToken (httpt_vb_MyCollaborations.ContentDelimeter);
+		String columnaddress = st.nextToken (httpt_vb_MyCollaborations.ContentDelimeter);
+		String xlcolumnId= st.nextToken (httpt_vb_MyCollaborations.ContentDelimeter);
+		String columnName = st.nextToken (httpt_vb_MyCollaborations.ContentDelimeter);
+		String columntype = st.nextToken (httpt_vb_MyCollaborations.ContentDelimeter);
+		String cellvalue  = st.nextToken (httpt_vb_MyCollaborations.ContentDelimeter);
+		String xlFormula = st.nextToken (httpt_vb_MyCollaborations.ContentDelimeter);
+		String action  = st.nextToken ();
+
+	   //System.out.println("Excel:::row: " + rowaddress + " rowid " + xlrowId + " column address " + columnaddress + " columnid " + xlcolumnId + " column: " + columnName + " columntype: " + columntype + " cellvalue:" + cellvalue+"***");
+
+
+		if ( xlcolumnId.trim().equals("-1")  )
+		{
+			xlColumn newColumn = (xlColumn)xlColumnByAddress.get(new Integer(columnaddress));
+			if ( newColumn != null )
+			{
+				xlcolumnId =Integer.toString(newColumn.getId() );
+				newCell = true;
+			}
+			else
+			{
+				 //System.out.println("Excel:::column: " + columnaddress +" is null " );
+			}
+		}
+
+		if ( xlrowId.trim().equals("-1")  )
+		{
+			xlRow newRow = (xlRow)xlRowByAddress.get(new Integer(rowaddress));
+			xlrowId =Integer.toString(newRow.getId() );
+			// System.out.println("for row num " + rowaddress + "  found row Id =  " + xlrowId );
+			 newCell = true;
+		}
+
+		// check whether cell should be updated. It cannot be updated if the table is
+		// readonly, except when user is allowed to create new rows and columns
+		if (isReadOnly == true && newCell == false)
+		{
+			//System.out.println("Skipping cell   Rowid  = " + xlrowId + "   column =" + xlcolumnId + "    value = " + cellvalue);
+			return 0;
+		}
+
+		String bwFormula = null;
+		//if (!xlFormula.equals(" "))
+		//{
+		//	bwFormula = xformFormula (xlFormula, Integer.parseInt(xlrowId), Integer.parseInt(xlcolumnId));
+		//}
+		// Native format for now....
+
+		bwFormula=xlFormula;
+
+		//xlRowColCellsBuf.append(Integer.parseInt(xlrowId)+","+Integer.parseInt(xlcolumnId)+","+cellvalue+"@");
+		RowColumnCell rcc = new RowColumnCell(Integer.parseInt(xlrowId), Integer.parseInt(xlcolumnId), columntype, cellvalue, bwFormula);
+		xlRowColCells.addElement(rcc);
+
+		//System.out.println ( "   Rowid  = " + rcc.getRowId() + "   column =" + rcc.getColumnId() + "    value = " + cellvalue );
+		return 0;
+    }
+
+    private String xformFormula(String formula, int cRowId, int cColId)
+    {
+		//System.out.println("xlFormula = " + formula);
+		StringBuffer bwFormulaBuffer = new StringBuffer ();
+		xlRow cRow = (xlRow)xlRowById.get(new Integer(cRowId));
+		xlColumn cCol = (xlColumn)xlColumnById.get(new Integer(cColId));
+		if (cRow == null)
+		{
+			cRow = (xlRow)xlNewRowById.get(new Integer(cRowId));
+		}
+		int cRowAddress = cRow.getRowAddress();
+
+		if (cCol == null)
+		{
+			cCol = (xlColumn)xlNewColumnById.get(new Integer(cColId));
+		}
+		int cColAddress = cCol.getColumnAddress();
+
+		final int flags = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+
+		String patternString = "(!)?R(?:(?:\\[-?\\d*\\])|(?:\\d*))?C(?:(?:\\[-?\\d*\\])|(?:\\d*))?:?R?(?:(?:\\[-?\\d*\\])|(?:\\d*))?C?(?:(?:\\[-?\\d*\\])|(?:\\d*))?";
+		//String patternString = "(R)(\\[?)(-?\\d*)?(\\]?)(C)(\\[?)(-?\\d*)?(\\]?)";
+		Pattern pattern = Pattern.compile(patternString, flags);
+		Matcher m = pattern.matcher(formula); // get a matcher object
+//(?(?\\[-?\\d*\\])|(?\\d*))?
+		while (m.find())
+		{
+
+	/***************/
+			//System.out.println("Match number "+count);
+			System.out.println("m.groupCount() = " + m.groupCount());
+			for (int i=0; i<=m.groupCount(); i++)
+			{
+				if (m.group(i) != null)
+				{
+					String groupStr = m.group(i);
+					System.out.println("m.group("+i+")="+groupStr+"::"+groupStr.length()+"::" + "m.start = "+m.start(i) +"::"+ "m.end = "+m.end(i));
+				}
+				else
+				{
+					System.out.println("m.group("+i+")= null");
+				}
+			}
+	/*****************/
+			String replaceString = new String();
+			// external references already transformed, skip them
+			if (m.group(1) != null &&  m.group(1).length() >0 )
+			{
+				replaceString = m.group(0);
+				m.appendReplacement(bwFormulaBuffer,replaceString);
+				continue;
+			}
+
+			// local references
+			String ps2 = "(R)(\\[?)(-?\\d*)?(\\]?)(C)(\\[?)(-?\\d*)?(\\]?)";
+			Pattern p2 = Pattern.compile(ps2, flags);
+			Matcher m2 = p2.matcher(m.group(0));
+			String refStr = m.group(0);
+			StringBuffer buf2 = new StringBuffer();
+			while(m2.find())
+			{
+				int cn = -1;
+				int rn = -1;
+				int cid;
+				int rid;
+				String rep2 = new String();
+
+	/***************/
+				//System.out.println("Match number "+count);
+				System.out.println("m2.groupCount() = " + m2.groupCount());
+				for (int i=0; i<=m2.groupCount(); i++)
+				{
+					if (m2.group(i) != null)
+					{
+						String groupStr = m2.group(i);
+						System.out.println("m2.group("+i+")="+groupStr+"::"+groupStr.length()+"::" + "m2.start = "+m2.start(i) +"::"+ "m2.end = "+m2.end(i));
+					}
+					else
+					{
+						System.out.println("m2.group("+i+")= null");
+					}
+				}
+	/*****************/
+				xlRow fRow;
+				xlColumn fCol;
+
+				if (m2.group(3).length() > 0)
+				{
+					if (m2.group(2).length() == 0)
+					{
+						String rnStr = refStr.substring(m2.start(3), m2.end(3));
+						rn = Integer.parseInt(rnStr);
+						if (rn == 1) // first row is the header for us
+						{
+							rep2 = rep2 + "R0";
+
+						}
+						else
+						{
+							fRow = (xlRow)xlRowByAddress.get(new Integer(rn));
+							rid = fRow.getId();
+							rep2 = rep2 + "R" + rid;
+						}
+					}
+					else
+					{
+						String rOffset = refStr.substring(m2.start(3), m2.end(3));
+						rn = cRowAddress + Integer.parseInt(rOffset);
+						fRow = (xlRow)xlRowByAddress.get(new Integer(rn));
+						rid = fRow.getId();
+						rep2 = rep2 + "R[" + rid + "]";
+					}
+				}
+				else
+				{
+				   rn = cRowAddress;
+				   fRow = (xlRow)xlRowByAddress.get(new Integer(rn));
+				   rid = fRow.getId();
+				   rep2 = rep2 + "R[" + rid + "]";
+				}
+
+				if (m2.group(7).length() > 0)
+				{
+					if (m2.group(6).length() == 0)
+					{
+						String cnStr = refStr.substring(m2.start(7), m2.end(7));
+						cn = Integer.parseInt(cnStr);
+						fCol = (xlColumn)xlColumnByAddress.get(new Integer(cn));
+						cid = fCol.getId();
+						rep2 = rep2 + "C" + cid;
+					}
+					else
+					{
+						String cOffset = refStr.substring(m2.start(7), m2.end(7));
+						cn = cColAddress + Integer.parseInt(cOffset);
+						fCol = (xlColumn)xlColumnByAddress.get(new Integer(cn));
+						cid = fCol.getId();
+						rep2 = rep2 + "C[" + cid + "]";
+					}
+				}
+				else
+				{
+				   cn = cColAddress;
+				   fCol = (xlColumn)xlColumnByAddress.get(new Integer(cn));
+				   cid = fCol.getId();
+				   rep2 = rep2 + "C[" + cid + "]";
+				}
+
+				//System2.out.println("cn = " + cn);
+				//System2.out.println("rn = " + rn);
+				//System2.out.println("cid = " + cid);
+				//System2.out.println("rid = " + rid);
+				//System2.out.println("matched String = " + m2.group(0));
+				//System2.out.println("rep2 = " + rep2);
+
+				m2.appendReplacement(buf2,rep2);
+				//System2.out.println(buf2.toString());
+
+			}
+			m2.appendTail(buf2);
+			replaceString = buf2.toString();
+			m.appendReplacement(bwFormulaBuffer,replaceString);
+		}
+		m.appendTail(bwFormulaBuffer);
+
+		System.out.println("bwFormula = " + bwFormulaBuffer.toString());
+		return bwFormulaBuffer.toString();
+	}
+
+} // http_vb_createcells

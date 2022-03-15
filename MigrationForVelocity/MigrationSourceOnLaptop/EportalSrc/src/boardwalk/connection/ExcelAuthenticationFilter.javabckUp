@@ -1,0 +1,120 @@
+package boardwalk.connection;
+
+import com.boardwalk.exception.*;
+
+import java.io.*;
+import java.util.*;
+import javax.servlet.*;
+import javax.servlet.http.*;
+
+
+public abstract class ExcelAuthenticationFilter
+implements Filter, SingleThreadModel
+{
+    private FilterConfig filterConfig = null;
+    private int userId;
+	private String userName;
+	private String userPassword;
+	private int memberId;
+	private int nhId;
+	private String nhName;
+	private final static String Seperator = new Character((char)1).toString();
+	private final static String ContentDelimeter = new Character((char)2).toString();
+
+    public void doFilter(ServletRequest request, ServletResponse response,
+                         FilterChain chain)
+	throws IOException, ServletException
+	{
+		boolean browserRequest = true;
+		ServletOutputStream servletOut = null;
+		// Collect the username and password from the form
+		userName = null;
+		userPassword = null;
+		userName = request.getParameter("username");
+		userPassword = request.getParameter("password");
+		if (userName == null ) // The request is coming from Excel
+		{
+			System.out.println("Authenticating Excel Request to Boardwalk");
+			
+
+			BufferedReader br = request.getReader();
+			StringBuffer sb = new StringBuffer();
+			String line = new String();
+			//br.mark(2056);
+			line = br.readLine();
+			br.close();
+			String wrkstr;
+			StringTokenizer st = new StringTokenizer(line);
+			wrkstr = st.nextToken(Seperator);
+			userName = wrkstr;
+			wrkstr = st.nextToken(Seperator);
+			userPassword = wrkstr;
+	
+			browserRequest = false;
+		}
+		else
+		{
+			// if this is a registration request then send him off to the registration page
+			String action = request.getParameter("action");
+			if (action != null && action.equalsIgnoreCase("register"))
+			{
+				System.out.println("Forwarding request to registration page");
+				filterConfig.getServletContext().getRequestDispatcher("/jsp/admin/register.jsp").forward(request, response);
+				return;
+			}
+			System.out.println("Authenticating browser request to Boardwalk");
+		}
+
+
+		if (authenticate() == true)
+		{
+			// pass on the request for processing
+			request.setAttribute("userName", userName);
+			request.setAttribute("userPassword", userPassword);
+      		chain.doFilter(request, response);
+		}
+		else
+		{
+			if (browserRequest == false)
+			{
+				// block the request
+				servletOut = response.getOutputStream();
+				String invalid = new String("failure");
+
+				response.setContentType("text/plain");
+				response.setContentLength(invalid.length());
+				servletOut.println(invalid);
+				servletOut.close();
+			}
+			else
+			{
+				request.setAttribute("com.boardwalk.exception.BoardwalkException", new BoardwalkException(11004));
+				filterConfig.getServletContext().getRequestDispatcher("/jsp/admin/login.jsp").forward(request, response);
+			}
+		}
+    }
+
+	public abstract boolean authenticate();
+
+    public void destroy()
+    {
+
+    }
+
+    public void init(FilterConfig filterConfig)
+    {
+		this.filterConfig = filterConfig;
+    }
+
+    public String getUserName()
+    {
+		return userName;
+	}
+
+	public String getPassword()
+	{
+		return userPassword;
+	}
+
+}
+

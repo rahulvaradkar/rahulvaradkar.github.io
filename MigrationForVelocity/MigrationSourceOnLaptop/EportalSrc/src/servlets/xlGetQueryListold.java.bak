@@ -1,0 +1,83 @@
+package servlets;
+/*
+ *  This presents a list of collaboration available to a user
+ */
+import java.io.*;
+import java.util.*;
+import javax.servlet.*;
+import javax.servlet.http.*;
+import com.boardwalk.exception.*;
+import com.boardwalk.database.*;
+import java.sql.*;                  // JDBC package
+import javax.sql.*;                 // extended JDBC packa
+import boardwalk.common.*;
+import com.boardwalk.exception.*;
+
+
+public class xlGetQueryList extends xlService implements SingleThreadModel
+{
+	public void service(HttpServletRequest request,
+		HttpServletResponse response)throws ServletException, IOException
+	{
+		Connection connection = null;
+		CallableStatement callableStatement = null;
+		ResultSet rs = null;
+		String responseBuffer = null;
+
+		try
+		{
+			System.out.println("Inside xlGetQueryList");
+			
+			String buf = getRequestBuffer(request).toString();
+			// parse the information
+			String[] headerInfo = buf.split(Seperator);
+			
+			int tableId = Integer.parseInt(headerInfo[0]);
+			System.out.println("tableId = " + tableId);
+			int userId = Integer.parseInt(headerInfo[1]);
+			System.out.println("userId = " + userId);
+
+			// Start a connection
+			DatabaseLoader databaseloader = new DatabaseLoader(new Properties());
+			connection = databaseloader.getConnection();
+
+			callableStatement = connection.prepareCall("{CALL BW_GET_USER_DEFINED_QUERY_LIST(?,?)}");
+			callableStatement.setInt(1, tableId);
+			callableStatement.setInt(2, userId);
+			rs = callableStatement.executeQuery();
+			responseBuffer = "Success";
+			while (rs.next())
+			{
+				responseBuffer = responseBuffer + Seperator + rs.getString(1);
+			}
+
+			callableStatement.close();
+			rs.close();
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+			responseBuffer = e.toString();
+		}
+		finally
+		{
+			try
+			{
+				if (connection != null)
+					connection.close();
+				if (callableStatement != null)
+					callableStatement.close();
+				if (rs != null)
+					rs.close();
+			}
+			catch (Exception e)
+			{
+				e.printStackTrace();
+			}
+
+			commitResponseBuffer(responseBuffer, response);
+
+		}
+	}
+}
+

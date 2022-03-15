@@ -1,0 +1,123 @@
+// Decompiled by Decafe PRO - Java Decompiler
+// Classes: 1   Methods: 7   Fields: 1
+
+package com.boardwalk.database;
+
+import java.io.PrintStream;
+import java.sql.*;
+import java.util.Properties;
+import java.io.*;
+import javax.sql.DataSource;
+
+public class DatabaseLoader
+{
+
+    public static boolean  databaseInit = false;
+    //public static String databasehostname = null;
+//    public static String portnumber = null;
+    public static String databasename = null;
+    public static String user = null;
+    public static String password = null;
+    public static String jdbcConnectionString = null;
+    public static String databasetype = null;
+    public static QueryLoader queryLoader = null;
+
+
+
+
+    public static void initDatabase(Properties properties)
+    {
+        try
+        {
+
+			System.out.println("initDatabase calledd*****************************");
+			if ( ! databaseInit && properties.size() > 0 )
+			{
+					databaseInit = true;
+					 Class.forName("sun.jdbc.odbc.JdbcOdbcDriver");
+				     //java.sql.DriverManager.setLogStream(java.lang.System.out);
+
+				     // DriverManager.setLogWriter(null);
+
+				//	databasehostname = properties.getProperty("databasehostname");
+				//	portnumber = properties.getProperty("portnumber");
+					databasename = properties.getProperty("databasename");
+					user = properties.getProperty("user");
+					password = properties.getProperty("password");
+					databasetype = properties.getProperty("databasetype");
+					// jdbcConnectionString = "jdbc:microsoft:sqlserver://"+databasehostname+":"+ portnumber+";SelectMethod=cursor;DatabaseName="+databasename+";user="+user+";password="+ password;
+					jdbcConnectionString = "jdbc:odbc:"+ databasename+";user="+user+";password="+password+";EXEC="+"T"+";XSM="+"SA"+";DBQ="+"BW";
+					queryLoader = new QueryLoader(properties);
+					System.out.println("databasetype="+ databasetype);
+
+			}
+
+
+
+        }
+        catch(Exception exception)
+        {
+            exception.printStackTrace();
+        }
+    }
+
+    public DatabaseLoader(Properties properties)
+    {
+		System.out.println("DatabaseLoader calledd*****************************");
+        if(! databaseInit)
+            initDatabase(properties);
+    }
+
+    public static PreparedStatement getPreparedStatementFromPreLoadedQueries(String queryName, Connection connection )
+    throws SQLException
+    {
+
+		String query = queryLoader.getQueryString(queryName);
+		PreparedStatement preparedstatement = connection.prepareStatement(query);
+		return preparedstatement;
+
+	}
+
+	public static String getDatabaseType()
+    {
+		return databasetype;
+	}
+
+    public Connection getConnection()
+        throws SQLException
+    {
+  /*
+        PoolManager poolmanager = PoolManager.getDefault();
+        System.out.println("Waiting on a connection");
+        Connection connection = poolmanager.getConnection(ds);
+        System.out.println("Pool Count:" + poolmanager.getConnectionCount() + "  Free:" + poolmanager.getFreeConnectionCount() + "  Used:" + poolmanager.getUsedConnectionCount());
+        return connection;
+   */
+   //     Connection conn =  DriverManager.getConnection(
+   //                           "jdbc:microsoft:sqlserver://localhost:1231;SelectMethod=cursor;DatabaseName=BW_DB;user=BW_APPLICATION_USER;password=BW_APPLICATION_USER");
+
+     Connection conn =  DriverManager.getConnection(jdbcConnectionString);
+        System.out.println("Got Connection ::: " + conn.toString());
+        return conn;
+    }
+
+
+
+    public static void main(String args[])
+        throws Exception
+    {
+        DatabaseLoader databaseloader = new DatabaseLoader(new Properties());
+        Connection conn = databaseloader.getConnection();
+    }
+
+}
+
+
+
+
+
+
+
+
+
+

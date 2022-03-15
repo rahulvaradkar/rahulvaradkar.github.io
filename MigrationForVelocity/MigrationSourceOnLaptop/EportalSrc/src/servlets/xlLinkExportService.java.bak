@@ -1,0 +1,719 @@
+package servlets;
+/*
+ *  Link:Export from excel - sarang
+ */
+import java.io.*;
+import java.util.*;
+import javax.servlet.*;
+import javax.servlet.http.*;
+import com.boardwalk.table.*;
+import com.boardwalk.excel.*;
+import com.boardwalk.exception.*;
+import com.boardwalk.database.*;
+import java.sql.*;                  // JDBC package
+import javax.sql.*;                 // extended JDBC packa
+import com.boardwalk.member.Member;
+import com.boardwalk.user.UserManager;
+
+import java.lang.Exception;
+import java.util.zip.*;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.io.*;
+
+public class xlLinkExportService extends xlService implements SingleThreadModel
+{
+
+	public final static String Seperator = new Character((char)1).toString();
+	public final static String ContentDelimeter = new Character((char)2).toString();
+	int numColumns	= 0;
+	int numRows		= 0;
+	int tableId		= -1;
+	int nhId		= -1;
+
+	ArrayList	columnIds = null;
+	ArrayList	rowIds = null;
+	ArrayList	formulaIds = null;
+	ArrayList	strValIds = null;
+	String		formulaString = null;
+
+	int userId = -1;
+	String userName	= null;
+	String userPassword =null;
+	int	   memberId		= -1;
+	//ArrayList formulaArray = new ArrayList();
+	String view = null;//		= "LATEST"; // Will default to Latest.
+	String query =null;//= "";
+
+	// Error vector to all the Exceptions
+	Vector xlErrorCells = null; //new Vector();
+	// access variables
+	boolean canAddRows = false;
+	boolean canDeleteRows = false;
+	boolean canAdministerColumns = false;
+
+	Connection connection		= null;
+	PreparedStatement stmt		= null;
+	TransactionManager tm = null;
+	int tid = -1;
+
+	int MAX_RETRY_ATTEMPTS = 5;
+	int RETRY_WAIT_TIME_MIN = 1000;
+	int RETRY_WAIT_TIME_MAX = 3000;
+
+	public void service(HttpServletRequest request, HttpServletResponse response)throws ServletException, IOException
+	{
+
+		getElapsedTime();
+
+		// Failure String
+		String failureReason = "";
+		//String reqBuffer = getRequestBuffer(request).toString();
+		BoardwalkRequestReader reader = getRequestReader(request);
+		//System.out.println(reqBuffer);
+		//String[] fullTableArr = reqBuffer.split(ContentDelimeter);
+		//System.out.println(fullTable);
+		System.out.println("xlLinkExportService: Time to read the buffer = " + getElapsedTime());
+		try
+		{
+			MAX_RETRY_ATTEMPTS = Integer.parseInt(getServletConfig().getInitParameter("MAX_RETRY_ATTEMPTS"));
+			RETRY_WAIT_TIME_MIN = Integer.parseInt(getServletConfig().getInitParameter("RETRY_WAIT_TIME_MIN"));
+			RETRY_WAIT_TIME_MAX = Integer.parseInt(getServletConfig().getInitParameter("RETRY_WAIT_TIME_MAX"));
+			System.out.println("MAX_RETRY_ATTEMPTS=" + MAX_RETRY_ATTEMPTS);
+			System.out.println("RETRY_WAIT_TIME_MIN=" + RETRY_WAIT_TIME_MIN);
+			System.out.println("RETRY_WAIT_TIME_MAX=" + RETRY_WAIT_TIME_MAX);
+		}
+		catch (Exception e)
+		{
+			System.out.println("Deadlock parameters not set. Using defaults...");
+		}
+		StringBuffer responseToUpdate = null; //new StringBuffer();
+		String responseBuffer = null;
+		for (int ti = 0; ti < MAX_RETRY_ATTEMPTS; ti++)
+		{
+			responseToUpdate = new StringBuffer ();
+			responseBuffer = null;
+			
+			try
+			{
+
+				//processHeader(fullTableArr[0]);
+				processHeader(reader.getNextContent());
+				//processColumns(fullTableArr[1]);
+				processColumns(reader.getNextContent());
+				// Add rows
+				System.out.println("xlLinkExportService:service() : userId = " + userId);
+				System.out.println("xlLinkExportService:service() : tableId = " + tableId);
+				System.out.println("xlLinkExportService:service() : tid = " + tid);
+				System.out.println("xlLinkExportService:service() : numRows = " + numRows);
+				System.out.println("xlLinkExportService:service() : numColumns = " + numColumns);
+				if (numRows > 0)
+				{
+					if (canAdministerColumns && canAddRows)
+						rowIds = TableManager.createRowsNewTable(connection, tableId, tid, userId, numRows);
+					System.out.println("xlLinkExportService: Time to create rows = " + getElapsedTime());
+					
+					/* PWC_ZZZ_1_29
+
+					// Add Cells
+					query =
+						" INSERT INTO BW_CELL (BW_ROW_ID, BW_COLUMN_ID, CELL_TYPE, TX_ID) " +
+						" SELECT BW_ROW.ID, BW_COLUMN.ID, 'STRING', ? " +
+						" FROM BW_ROW, BW_COLUMN " +
+						" WHERE " +
+						" BW_ROW.TX_ID = ? " +
+						" AND BW_COLUMN.TX_ID = ? ";
+					stmt = connection.prepareStatement(query);
+					stmt.setInt(1, tid);
+					stmt.setInt(2, tid);
+					stmt.setInt(3, tid);
+					stmt.executeUpdate();
+					stmt.close();
+					stmt = null;
+					System.out.println("xlLinkExportService: Time to insert into bw_cell table = " + getElapsedTime());
+
+					// Create new bw cell status records
+					String q2 = "INSERT INTO BW_CELL_STATUS " +
+							   "  SELECT BW_CELL.ID, 1, BW_CELL.TX_ID " +
+							   "  FROM BW_CELL " +
+							   "  WHERE BW_CELL.TX_ID = ?";
+					stmt = connection.prepareStatement(q2);
+					stmt.setInt(1, tid);
+					stmt.executeUpdate();
+					stmt.close();
+					stmt = null;
+					System.out.println("xlLinkExportService: Time to create bw cell status records= " + getElapsedTime());
+					*/
+					// Insert into BW_RC_STRING_VALUE
+					for (int i = 0; i < numColumns * 2; i = i + 2)
+					{
+						int columnIdx = i / 2;
+						System.out.println("Processing column num = " + columnIdx);
+						//processColumnData(fullTableArr[i + 2], fullTableArr[i + 3], columnIdx);
+						String cellBuff = reader.getNextContent();
+						String fmlaBuff = reader.getNextContent();
+						processColumnData(cellBuff, fmlaBuff, columnIdx);
+						cellBuff = null;
+						fmlaBuff = null;
+					}
+					System.out.println("xlLinkExportService: Time to insert into rcsv table = " + getElapsedTime());
+
+
+					System.out.println("xlLinkExportService: xlErrorCells.size() " + xlErrorCells.size());
+					if (xlErrorCells.size() > 0)
+					{
+						throw new BoardwalkException(12011);
+					}
+
+					query = "{CALL BW_UPD_CELL_FROM_RCSV_LINK_EXPORT(?,?,?)}";
+					CallableStatement cstmt = connection.prepareCall(query);
+					cstmt.setInt(1, tid);
+					cstmt.setInt(2, tableId);
+					cstmt.setInt(3, userId);
+					int updCount = cstmt.executeUpdate();
+					cstmt.close();
+					cstmt = null;
+					System.out.println("xlLinkExportService: Time to execute BW_UPD_CELL_FROM_RCSV_LINK_EXPORT = " + getElapsedTime());
+				}
+				// commit the transaction
+				tm.commitTransaction();
+				tm = null;
+				//tm.rollbackTransaction(); // FOR NOW
+
+				// create the response
+				responseToUpdate.append("Success" + Seperator);
+				responseToUpdate.append(numColumns + Seperator);
+				responseToUpdate.append(numRows + Seperator);
+				responseToUpdate.append(tid + ContentDelimeter);
+
+				responseToUpdate.append(tableId + ContentDelimeter + memberId + ContentDelimeter);
+
+				int ri = 0;
+				int ci = 0;
+
+				for (ri = 0; ri < numRows - 1; ri++)
+				{
+					responseToUpdate.append(rowIds.get(ri) + Seperator);
+				}
+
+				if (numRows > 0)
+					responseToUpdate.append(rowIds.get(ri) + ContentDelimeter);//last rowid
+				else
+					responseToUpdate.append(ContentDelimeter);//last rowid
+
+				for (ci = 0; ci < numColumns - 1; ci++)
+				{
+					responseToUpdate.append(columnIds.get(ci) + Seperator);
+				}
+
+				responseToUpdate.append(columnIds.get(ci) + ContentDelimeter);//last columnid
+
+				responseToUpdate.append(formulaString + ContentDelimeter);
+
+				ti = MAX_RETRY_ATTEMPTS; // dont try again
+
+				failureReason = "";
+
+			}
+			catch (SQLException sqe)
+			{
+
+				sqe.printStackTrace();
+				try
+				{
+					if (tm != null)
+						tm.rollbackTransaction();
+				}
+				catch (Exception e1)
+				{
+					e1.printStackTrace();
+				}
+				if (sqe.getErrorCode() == 1205)
+				{
+					if (ti == MAX_RETRY_ATTEMPTS - 1)
+					{
+						failureReason = (new xlErrorNew(tableId, 0, 0, 13001)).buildTokenString();
+						System.out.println("xlLinkExportService: Deadlock maximum attempts exhausted. Sending server busy message to client ");
+
+						System.out.println("xlLinkExportService:failureReason = " + failureReason);
+					}
+					System.out.println("xlLinkExportService:Deadlock attempt number = " + (ti + 1) + " out of max = " + MAX_RETRY_ATTEMPTS);
+					//sqe.printStackTrace();
+					try
+					{
+						int sleepTime = RETRY_WAIT_TIME_MIN + (new Random()).nextInt(RETRY_WAIT_TIME_MAX - RETRY_WAIT_TIME_MIN);
+						System.out.println("Sleeping for " + sleepTime + "ms");
+						Thread.sleep(sleepTime);
+					}
+					catch (InterruptedException e)
+					{
+						e.printStackTrace();
+					}
+				}
+				else
+				{
+					failureReason = sqe.getMessage();
+					ti = MAX_RETRY_ATTEMPTS; // dont try again
+				}
+
+			}
+			catch (BoardwalkException bwe)
+			{
+				ti = MAX_RETRY_ATTEMPTS; // dont try again
+				bwe.printStackTrace();
+				if (xlErrorCells.size() > 0)
+				{
+					StringBuffer errorBuffer = new StringBuffer();
+
+					for (int errorIndex = 0; errorIndex < xlErrorCells.size(); errorIndex++)
+					{
+						xlErrorNew excelError = (xlErrorNew)(xlErrorCells.elementAt(errorIndex));
+						errorBuffer.append(excelError.buildTokenString());
+					}
+					errorBuffer.append(Seperator);
+					failureReason = errorBuffer.toString();
+					
+					try
+					{
+						if (tm != null)
+							tm.rollbackTransaction();
+					}
+					catch (Exception e1)
+					{
+						e1.printStackTrace();
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				ti = MAX_RETRY_ATTEMPTS; // dont try again
+				e.printStackTrace();
+				try
+				{
+					if (tm != null)
+						tm.rollbackTransaction();
+				}
+				catch (Exception e1)
+				{
+					e1.printStackTrace();
+				}
+				failureReason = e.getMessage();
+			}
+			finally
+			{
+				// close the connection
+				try
+				{
+					reader.close();
+					connection.close();
+				}
+				catch (Exception e)
+				{
+					e.printStackTrace();
+				}
+
+				// clean up
+				numColumns = 0;
+				numRows = 0;
+				tableId = -1;
+				nhId = -1;
+
+				columnIds = null;
+				rowIds = null;
+				formulaIds = null;
+				strValIds = null;
+				formulaString = null;
+
+				userId = -1;
+				userName = "";
+				userPassword = "";
+				memberId = -1;
+				//formulaArray = null;
+				view = null;
+				query = "";
+				xlErrorCells = null;
+				
+				canAddRows = false;
+				canDeleteRows = false;
+				canAdministerColumns = false;
+
+				connection = null;
+				stmt = null;
+				tm = null;
+				tid = -1;
+			}
+		}
+
+		// The response
+		if (failureReason.length() == 0)
+		{
+			responseBuffer = responseToUpdate.toString();
+			commitResponseBuffer(responseBuffer, response);
+			System.out.println("xlLinkExportService: Success : Time to prepare response = " + getElapsedTime());
+		}
+		else
+		{
+			failureReason = "FAILURE" + ContentDelimeter + failureReason;
+			commitResponseBuffer(failureReason, response);
+
+			System.out.println("xlLinkExportService: Failure : Time to prepare response = " + getElapsedTime());
+			System.out.println("xlLinkExportService: failureReason = " + failureReason);
+		}
+	}
+
+	public void processColumnData(String cellData, String formulaData, int columnIdx) throws SQLException 
+	{
+		String[] cellArr = cellData.split(Seperator);
+		String[] formulaArr = formulaData.split(Seperator);
+		int columnId = ((Integer)columnIds.get(columnIdx)).intValue();
+		boolean emptyColumn = false;
+		System.out.println("cellArr.length = " + cellArr.length);
+		if (cellArr.length == 0) // empty column
+		{
+			emptyColumn = true;
+			System.out.println("Column is empty");
+		}
+		boolean emptyFormulae = false;
+		if (formulaArr.length == 0) // empty column
+		{
+			emptyFormulae = true;
+			System.out.println("Formulae is empty");
+		}
+
+		// insert into bw_rc_string_value 
+		query = 
+			" INSERT INTO BW_RC_STRING_VALUE " + 
+			" (BW_ROW_ID, BW_COLUMN_ID, STRING_VALUE, FORMULA, TX_ID, CHANGE_FLAG) " +
+			" VALUES " +
+			" (?, ?, ?, ?, ?, ?) ";
+
+		stmt = connection.prepareStatement(query);
+		for (int i = 0; i < numRows; i++)
+		{
+			int rowId = ((Integer)rowIds.get(i)).intValue ();
+			String cellValue = "";
+			String formula = null;
+			if (emptyColumn == false)
+			{
+				try
+				{
+					cellValue = cellArr[i];
+				}
+				catch (ArrayIndexOutOfBoundsException e)
+				{
+					cellValue = "";
+				}
+			}
+			if (emptyFormulae == false)
+			{
+				try
+				{
+					formula = formulaArr[i];
+					if (formula.indexOf("=") < 0)
+					{
+						formula = null;
+					}
+				}
+				catch (ArrayIndexOutOfBoundsException e)
+				{
+					formula = null;
+				}
+			}
+			//System.out.println("INSERT INTO BW_RC_STRING_VALUE rowId = " + rowId + " columnId = " + columnId + " cellValue = " + cellValue + " formula = " + formula);
+
+			stmt.setInt(1, rowId);
+			stmt.setInt(2, columnId);
+			stmt.setString(3, cellValue);
+			stmt.setString(4, formula);
+			stmt.setInt(5, tid);
+			stmt.setInt(6, 12);
+			stmt.addBatch();
+		}
+		int[] rescnt = stmt.executeBatch();
+		stmt.close();
+		stmt = null;
+
+	}
+
+	public void processColumns(String columnInfo) throws BoardwalkException, SQLException
+	{
+		// If the user has access to add new Columns then procede forward
+		if(canAdministerColumns)
+		{
+			columnIds = new ArrayList(numColumns);
+			String[] columnNames = columnInfo.split(Seperator);
+			Vector columns = new Vector();
+			query = " INSERT INTO BW_COLUMN " +
+					   " (NAME, BW_TBL_ID, COLUMN_TYPE, SEQUENCE_NUMBER, TX_ID) " +
+					   " VALUES " +
+					   " (?,?,?,?,?)";
+
+			stmt = connection.prepareStatement(query);
+			// Add columns
+			for (int cni = 0; cni < numColumns; cni++)
+			{
+				System.out.println("Adding column : " + columnNames[cni]);
+				stmt.setString(1, columnNames[cni]);
+				stmt.setInt(2, tableId);
+				stmt.setString(3, "STRING");
+				stmt.setFloat(4, cni + 1);
+				stmt.setInt(5, tid);
+				stmt.addBatch();
+			}
+			int[] rescnt = stmt.executeBatch();
+			stmt.clearBatch();
+			stmt.close();
+			stmt = null;
+		}
+
+		//HashMap columnHash = new HashMap();
+		ResultSet resultset = null;
+		query = "select id from bw_column where tx_id = ? order by sequence_number";
+		stmt = connection.prepareStatement(query);
+		stmt.setInt(1, tid);
+		resultset = stmt.executeQuery();
+		while (resultset.next())
+		{
+			int columnId = resultset.getInt(1);
+			//int columnIdx = resultset.getFloat (2);
+			columnIds.add (new Integer(columnId));
+			//columnHash.put (new Integer(columnIdx), new Integer(columnId));
+			//System.out.println("columnid = " + columnId);
+		}
+		stmt.close();
+		stmt = null;
+		resultset.close();
+		resultset = null;
+	}
+
+	public void processHeader(String header) throws BoardwalkException, SQLException, SystemException
+	{
+
+		System.out.println("header = " + header);
+
+
+		String[] headerInfo = header.split(Seperator);
+
+		System.out.println("headerInfo[0] = " + headerInfo[0]);
+		System.out.println("headerInfo[1] = " + headerInfo[1]);
+		System.out.println("headerInfo[2] = " + headerInfo[2]);
+		System.out.println("headerInfo[3] = " + headerInfo[3]);
+		System.out.println("headerInfo[4] = " + headerInfo[4]);
+		System.out.println("headerInfo[5] = " + headerInfo[5]);
+		System.out.println("headerInfo[6] = " + headerInfo[6]);
+		System.out.println("headerInfo[7] = " + headerInfo[7]);
+
+
+		userId				= Integer.parseInt(headerInfo[0]);
+		System.out.println("processHeader() : userId = " + userId);
+		userName			= headerInfo[1];
+		userPassword        = headerInfo[2];
+		memberId			= Integer.parseInt (headerInfo[3]);
+		tableId				= Integer.parseInt (headerInfo[4]);
+		nhId				= Integer.parseInt (headerInfo[5]);
+		numColumns			= Integer.parseInt(headerInfo[6]);
+		numRows				= Integer.parseInt (headerInfo[7]);
+		view = "LATEST";
+		xlErrorCells = new Vector();
+
+		// Start a connection
+		DatabaseLoader databaseloader = new DatabaseLoader(new Properties());
+		connection = databaseloader.getConnection();
+
+		//	Access control checks
+		TableInfo tinfo = TableManager.getTableInfo(connection, userId, tableId);
+		TableAccessList ftal = TableViewManager.getSuggestedAccess(connection, tinfo, userId, memberId, nhId);
+		//if (view == null ||  view.trim().equals(""))
+		//{
+		//    view = ftal.getSuggestedViewPreferenceBasedOnAccess();
+		//    System.out.println("Suggested view pref = " + view);
+		//    if(view == null)
+		//        view = "None";
+		//}
+		// Check access control :: TBD
+		int raccess = 1;
+		int ACLFromDB = ftal.getACL();
+		TableAccessRequest wAccess = new TableAccessRequest(tableId, "LATEST", true);
+		int wACL = wAccess.getACL();
+		int awACL = wACL & ACLFromDB;
+
+		canAddRows				= ftal.canAddRow();
+		canDeleteRows			= ftal.canDeleteRow();
+		canAdministerColumns	= ftal.canAdministerColumn();
+
+// authenticate the user
+		Member memberObj = UserManager.authenticateMember(connection, userName,userPassword, memberId);
+		if (memberObj == null)
+		{
+			System.out.println("Authentication failed for user : " + userName);
+			xlErrorCells.add( new xlErrorNew( tableId, 0, 0, 11004));
+			throw new BoardwalkException(11004);
+		}
+		else
+		{
+			System.out.println("Authentication succeeded for user : " + userName);
+			nhId = memberObj.getNeighborhoodId();
+			tm = new TransactionManager(connection, userId);
+			tid = tm.startTransaction("Link export new table", "Link export new table");
+		}
+
+		System.out.println("Time to authenticate user = " + getElapsedTime());
+
+		if(canAdministerColumns == false)
+		{
+			// User does not have access to add columns
+			xlErrorCells.add( new xlErrorNew( tableId,0,0,12010));
+			System.out.println("No access to add column");
+		}
+
+		if(canAddRows == false)
+		{
+			xlErrorCells.add( new xlErrorNew( tableId,0,0,12012));
+			System.out.println("No access to add rows");
+		}
+		System.out.println("view = " + view);
+		if(view.equals("None"))
+		{
+			xlErrorCells.add( new xlErrorNew(tableId, 0, 0, 10005));
+		}
+	}
+
+	//try
+	//    {
+
+	//        while (j >= 0)
+	//        {
+
+	//            }
+	//            else if (jcount == 1) // column names
+	//            {
+
+	//            }
+	//            else if (jcount > 1) // data
+	//            {
+	//                if(canAdministerColumns && canAddRows)
+	//                {
+	//                    // Create new cells
+	//                    int ci = 0;
+	//                    int cj = sub.indexOf(Seperator);  // First substring
+	//                    int ccount = 0;
+	//                    //if (jcount == 2)
+	//                    //{
+	//                        String q1 = "insert into bw_cell " +
+	//                                   "  ( bw_row_id,bw_column_id,cell_type, string_value, tx_id) " +
+	//                                   "  values (?, ?,  'STRING', ?, ?) ";
+	//                        stmt = connection.prepareStatement(q1);
+	//                    //}
+	//                    while (cj >= 0 )
+	//                    {
+	//                        //int 
+	//                        String cellval = sub.substring(ci, cj);
+	//                        String 
+	//                        //System.out.println("cellval = " + cellval + " rowid = " + rowIds.get(ccount) + " colid = " + columnIds.get(jcount - 2));
+	//                        stmt.setInt(1, ((Integer) rowIds.get(ccount)).intValue() );
+	//                        stmt.setInt(2, ((Integer) columnIds.get(jcount - 2)).intValue());
+	//                        stmt.setString(3, cellval.trim());
+	//                        stmt.setInt(4, tid);
+	//                        stmt.addBatch();
+	//                        ccount++;
+	//                        ci = cj + 1;
+	//                        cj = sub.indexOf(Seperator, ci);   // Rest of substrings
+	//                    }
+	//                    cellval = sub.substring(ci); // Last substring
+	//                    //System.out.println("cellval = " + cellval + " rowid = " + rowIds.get(ccount) + " colid = " + columnIds.get(jcount - 2));
+	//                    stmt.setInt(1, ((Integer)rowIds.get(ccount)).intValue());
+	//                    stmt.setInt(2, ((Integer)columnIds.get(jcount - 2)).intValue());
+	//                    stmt.setString(3, cellval.trim());
+	//                    stmt.setInt(4, tid);
+	//                    stmt.addBatch();
+
+	//                    System.out.println("Commiting cells to database");
+	//                    int[] rescnt = stmt.executeBatch();
+	//                    stmt.close();
+	//                    stmt = null;
+	//                }
+	//            }
+	//            i = j + 1;
+	//            j = fullTable.indexOf(ContentDelimeter, i);
+	//            jcount++;
+	//        }
+
+	//        if(canAdministerColumns && canAddRows)
+	//        {
+
+	//            System.out.println("Time to create cells for column= " + getElapsedTime());
+	//            // Create new bw cell status records
+	//            String q2 = "insert into bw_cell_status " +
+	//                       "  select bw_cell.id, 1, bw_cell.tx_id " +
+	//                       "  from bw_cell " +
+	//                       "  where bw_cell.tx_id = ?";
+	//            stmt = connection.prepareStatement(q2);
+	//            stmt.setInt(1, tid);
+	//            stmt.executeUpdate();
+	//            stmt.close();
+	//            stmt = null;
+	//            System.out.println("Time to create bw cell status records  for column= " + getElapsedTime());
+
+	//            // Insert into the rc string value table
+	//            q2 = "insert into bw_rc_string_value " +
+	//                       "  select bw_cell.bw_row_id, bw_cell.bw_column_id, bw_cell.string_value, NULL, bw_cell.tx_id, 12 " +
+	//                       "  from bw_cell " +
+	//                       "  where bw_cell.tx_id = ?";
+	//            stmt = connection.prepareStatement(q2);
+	//            stmt.setInt(1, tid);
+	//            stmt.executeUpdate();
+	//            stmt.close();
+	//            stmt = null;
+	//            System.out.println("Time to create rc string values for column= " + getElapsedTime());
+
+
+	//            // process formulas here
+	//            int liForRowPos		= 0;
+	//            int liForColPos		= 0;
+	//            String formulaVal	= "";
+	//            int liRowId			= 0;
+	//            int liColId			= 0;
+	//            if(formulaArray != null && formulaArray.size ()>0)
+	//            {
+
+	//                System.out.println("Number of formulae = " + formulaArray.size());
+	//                String lsQuery = " UPDATE BW_RC_STRING_VALUE SET FORMULA = ? WHERE BW_ROW_ID = ? AND BW_COLUMN_ID = ? AND TX_ID = ?";
+
+	//                for (int liForCnt = 0; liForCnt < formulaArray.size(); liForCnt++)
+	//                {
+	//                    stmt = connection.prepareStatement(lsQuery);
+	//                    System.out.println("liForCnt=" + liForCnt);
+	//                    String[] formulaPosArray = ((String)formulaArray.get(liForCnt)).split(Seperator);
+	//                    int numPos = (formulaPosArray.length - 1) / 2;
+	//                    formulaVal = formulaPosArray[0];
+	//                    System.out.println("processing formula = " + formulaVal + " for numPos = " + numPos);
+	//                    for (int posCnt = 1; posCnt < formulaPosArray.length - 1; posCnt = posCnt + 2)
+	//                    {
+	//                        //System.out.println("posCnt=" + posCnt);
+	//                        liForRowPos = Integer.parseInt(formulaPosArray[posCnt]);
+	//                        liForColPos = Integer.parseInt(formulaPosArray[posCnt + 1]);
+
+	//                        //System.out.println(" liForRowPos=" + liForRowPos + " liForColPos=" + liForColPos + " formulaVal=" + formulaVal);
+	//                        //System.out.println(" Row id for Formula is " + rowIds.get(liForRowPos));
+	//                        liRowId = Integer.parseInt(rowIds.get(liForRowPos).toString());
+
+	//                        //System.out.println(" Column id for Formula is " + columnIds.get(liForColPos));
+	//                        liColId = Integer.parseInt(columnIds.get(liForColPos).toString());
+
+	//                        stmt.setString(1, formulaVal);
+	//                        stmt.setInt(2, liRowId);
+	//                        stmt.setInt(3, liColId);
+	//                        stmt.setInt(4, tid);
+	//                        stmt.addBatch();
+	//                    }
+
+	//                    int[] rescnt = stmt.executeBatch();
+	//                    stmt.clearBatch();
+	//                    stmt.close();
+	//                }
+	//                stmt = null;
+	//                lsQuery = null;
+
+	//            }
+	//        }
+
+}

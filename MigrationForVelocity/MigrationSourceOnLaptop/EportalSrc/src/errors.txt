@@ -1,0 +1,79 @@
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: com\boardwalk\collaboration\CollaborationManager.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: com\boardwalk\database\QueryLoader.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: com\boardwalk\exception\BoardwalkMessages.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: com\boardwalk\member\MemberManager.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: com\boardwalk\query\QueryManager.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+com\boardwalk\user\PasswordService.java:6: warning: BASE64Encoder is internal proprietary API and may be removed in a future release
+import sun.misc.BASE64Encoder;
+               ^
+com\boardwalk\user\PasswordService.java:7: warning: CharacterEncoder is internal proprietary API and may be removed in a future release
+import sun.misc.CharacterEncoder;
+               ^
+com\boardwalk\user\PasswordService.java:23: warning: BASE64Encoder is internal proprietary API and may be removed in a future release
+    String hash = (new BASE64Encoder()).encode(raw); //step 5
+                       ^
+Note: com\boardwalk\user\PasswordGenerator.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: com\boardwalk\user\UserManager.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+3 warnings
+Note: com\boardwalk\whiteboard\WhiteboardManager.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: com\boardwalk\wizard\BoardwalkUserWizards.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: com\boardwalk\distribution\XmlParse.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+javac: file not found: com\boardwalk\integration\*.java
+Usage: javac <options> <source files>
+use -help for a list of possible options
+Note: servlets\xlImportChangesService.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: servlets\xlImportChangesService.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: com\boardwalk\table\TableViewManager.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: boardwalk\connection\ExcelAuthenticationFilter.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: boardwalk\connection\BoardwalkConnectionManager.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: boardwalk\table\BoardwalkInviteManager.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: servlets\fileUploadService.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: servlets\AggregationService.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: boardwalk\table\BoardwalkPeriodicColumnManager.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: servlets\httpt_vb_Login.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: servlets\xlExportChangesService.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: servlets\xlExportChangesService.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: servlets\xlImportChangesService.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: servlets\xlImportChangesService.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Note: servlets\xlService.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.

@@ -1,0 +1,587 @@
+package servlets;
+
+/*
+ *  given a collection  of cells
+    of the form - rowname,columnname,celltype,cellvalue
+    This creates rows and columns and cells
+ */
+import java.io.*;
+import java.util.*;
+import javax.servlet.*;
+import javax.servlet.http.*;
+import com.boardwalk.database.DatabaseLoader;
+import com.boardwalk.exception.*;
+import com.boardwalk.collaboration.CollaborationManager;
+import com.boardwalk.whiteboard.WhiteboardManager;
+import com.boardwalk.user.UserManager;
+import com.boardwalk.util.*;
+import com.boardwalk.excel.*;
+import com.boardwalk.database.*;
+import com.boardwalk.table.*;
+import com.boardwalk.member.Member;
+
+import java.sql.*;                  // JDBC package
+import javax.sql.*;                 // extended JDBC packa
+
+
+
+
+public class httpt_vb_getcells
+
+{
+
+     int userId;
+     String userName;
+     String userPassword;
+     int nhId;
+     int memberId;
+     String nhName;
+
+
+     int m_tableid;
+     int rowCount;
+     int columnCount;
+     int baselineId;
+
+     String m_inputbuffer;
+
+     StringBuffer m_outputControlbuffer;
+     StringBuffer m_outputDatabuffer;
+
+     Vector  m_cells;
+     Hashtable m_columns;
+     Vector  m_rows;
+     StringTokenizer st;
+     String ViewPreference;
+     String QueryPreference;
+     int TransactionId = -1;
+     int maxTransactionId = 0;
+
+
+    public httpt_vb_getcells ( String comm_buffer )
+    {
+		m_inputbuffer = comm_buffer;
+		m_outputControlbuffer = new StringBuffer ();
+		m_outputDatabuffer = new StringBuffer ();
+    }
+
+
+    public boolean  loginUser ()
+    {
+    	System.out.println("string request" + m_inputbuffer);
+		String wrkstr;
+		st = new StringTokenizer( m_inputbuffer );
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		userId = Integer.parseInt(wrkstr);
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		userName = wrkstr;
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		userPassword = wrkstr;
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		memberId =  Integer.parseInt(wrkstr);
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		nhId = Integer.parseInt(wrkstr);
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		nhName =wrkstr;
+
+		//return true;
+
+				System.out.println("vb cells------"+userName + " " + userPassword + " " + memberId);
+
+		Connection connection = null;
+		try
+		{
+			DatabaseLoader databaseloader = new DatabaseLoader(new Properties());
+			connection = databaseloader.getConnection();
+
+			if (  userName == null  || userName == ""  || userPassword ==null || userPassword == "" )
+			{
+				return false;
+			}
+			else
+			{
+				Member memberObj = UserManager.authenticateMember(connection, userName,userPassword, memberId);
+
+				if (memberObj == null)
+				{
+					return false;
+				}
+				else
+				{
+					return true;
+				}
+
+			}
+		}
+		catch ( Exception e )
+		{
+		   e.printStackTrace();
+		   return false;
+		}
+		finally
+		{
+		  try
+		  {
+			connection.close();
+		  }
+		  catch ( SQLException sql )
+		  {
+			sql.printStackTrace();
+			return false;
+		  }
+		}
+
+	}
+
+
+    public int  Parse ()
+    {
+
+		String wrkstr;
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+        m_tableid = Integer.parseInt(wrkstr);
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+        ViewPreference = wrkstr;
+        wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+        QueryPreference = wrkstr;
+        wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		TransactionId = Integer.parseInt(wrkstr.trim());
+
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		columnCount =Integer.parseInt(wrkstr);
+		System.out.println("columnCount  " + columnCount );
+
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		rowCount =Integer.parseInt(wrkstr);
+		System.out.println("rowCount  " + rowCount);
+
+		int baselineId = -1;
+		wrkstr = st.nextToken (httpt_vb_MyCollaborations.Seperator);
+		if (wrkstr != null)
+		{
+			try
+			{
+				baselineId =Integer.parseInt(wrkstr);
+			}
+			catch( Exception e )
+			{
+
+			}
+		}
+		System.out.println("baselineId  " + baselineId);
+
+        //TableContents tbcon = null;
+        Connection connection = null;
+        Vector Errors = new Vector();
+        BoardwalkMessages bwMsgs = new BoardwalkMessages();
+        String m_failureReason = "";
+
+		Vector rowv = null;
+		Vector colv = null;
+		Vector cellv = null;
+		Hashtable RowObjsByRowId = null;
+		HashMap ColObjsByColId = null;
+		int raccess = 1;
+		long prevTime = System.currentTimeMillis();
+
+        try
+        {
+            DatabaseLoader databaseloader = new DatabaseLoader(new Properties());
+            connection = databaseloader.getConnection();
+			System.out.println("Time(sec) to get connection = " + (System.currentTimeMillis()-prevTime)/1000F);
+			prevTime = System.currentTimeMillis();
+			TableAccessList tbl = null;
+
+			// see if there is a criterea table associated with this table
+			int criteriaTableId = TableViewManager.getCriteriaTable(connection, m_tableid, userId);
+			System.out.println("Using criterea table id = " + criteriaTableId);
+
+			tbl= TableManager.getTableAccessForMember( connection, memberId, m_tableid);
+			TableAccessRequest tbareq = new TableAccessRequest( m_tableid, ViewPreference,false );
+			int requestedACL = tbareq.getACL();
+			int ACLFromDB = tbl.getACL();
+			System.out.println("Time(sec) to fetch table access = " + (System.currentTimeMillis()-prevTime)/1000F);
+			prevTime = System.currentTimeMillis();
+			//System.out.println(" Requested acl with view preference " +  ViewPreference );
+			//tbareq.print();
+			//System.out.println(" ACLFromDB " );
+			//tbl.print();
+
+
+			int allowedACL = requestedACL & ACLFromDB;
+			if ( allowedACL != requestedACL )
+			{
+				BoardwalkMessage bwMsg = bwMsgs.getBoardwalkMessage(10005 );
+				Errors.add( new xlError( m_tableid,-1,-1,-1,-1,  10005, "TABLE UPDATE EXCEPTION", bwMsg.getCause() + "," +  bwMsg.getPotentialSolution()));
+				throw new BoardwalkException(12011);
+			}
+
+			TableAccessRequest wAccess = new TableAccessRequest( m_tableid, ViewPreference,true );
+			int wACL = wAccess.getACL();
+			int awACL = wACL & ACLFromDB;
+			if (awACL == wACL)
+			{
+				raccess = 2;
+				System.out.println("Rows have write access");
+			}
+			else
+			{
+				System.out.println("Rows are readonly");
+			}
+
+
+			colv = ColumnManager.getXlColumnsForImport(connection, m_tableid, userId, memberId);
+			ColObjsByColId = new HashMap();
+			Iterator ci = colv.iterator();
+			while (ci.hasNext())
+			{
+				xlColumn_import coli = (xlColumn_import)ci.next();
+				ColObjsByColId.put(new Integer(coli.getId()), coli);
+			}
+			System.out.println("Time(sec) to fetch columns = " + (System.currentTimeMillis()-prevTime)/1000F);
+			prevTime = System.currentTimeMillis();
+			TableRowInfo tbrowInfo = null;
+			if (criteriaTableId == -1)
+			{
+				tbrowInfo = RowManager.getTableRows(connection, m_tableid, userId, nhId, baselineId, ViewPreference, 1, -1, -1);
+			}
+			else
+			{
+				String rowQuery = TableViewManager.getRowQuery(connection, m_tableid, userId, criteriaTableId, true);
+				tbrowInfo = TableViewManager.getFiltredTableRows(connection, m_tableid, userId, rowQuery, baselineId);
+			}
+			rowv = tbrowInfo.getRowVector();
+			RowObjsByRowId = tbrowInfo.getRowHash();
+			System.out.println("Time(sec) to fetch rows = " + (System.currentTimeMillis()-prevTime)/1000F);
+			prevTime = System.currentTimeMillis();
+			if (criteriaTableId == -1)
+			{
+				cellv = TableManager.getLatestCellsForTable(connection, m_tableid, userId, memberId, nhId, ViewPreference);
+			}
+			else
+			{
+				cellv = TableViewManager.getLatestCellsForTable(connection, m_tableid, userId, memberId, nhId, ViewPreference, criteriaTableId);
+			}
+			System.out.println("Time(sec) to fetch cells = " + (System.currentTimeMillis()-prevTime)/1000F);
+			prevTime = System.currentTimeMillis();
+			// BASELINE TO ME IMPLEMENTED*******************************///////////////////////**************************/////////////
+        }
+        catch ( BoardwalkException bwe )
+		{
+
+
+			bwe.printStackTrace();
+			m_outputControlbuffer = m_outputControlbuffer.append("Failure" + httpt_vb_MyCollaborations.Seperator);
+
+
+			if ( bwe.getErrorCode() == 12011 && Errors.size() > 0 )
+			{
+				for ( int errorIndex = 0; errorIndex< Errors.size(); errorIndex++ )
+				{
+					xlError excelError = (xlError)(Errors.elementAt(errorIndex));
+					m_outputControlbuffer.append( excelError.buildTokenString() );
+				}
+				m_outputControlbuffer.append( Constants.Seperator );
+				m_failureReason =  m_outputControlbuffer.toString();
+				System.out.println(m_failureReason);
+			}
+			else
+			{
+
+				m_failureReason =  bwe.getMessage() + ", " + bwe.getPotentialSolution();
+				m_outputControlbuffer.append( bwe.getErrorCode() );
+				m_outputControlbuffer.append( Constants.ContentDelimeter );
+				m_outputControlbuffer.append( "TABLE_IMPORT_EXCEPTION" );
+				m_outputControlbuffer.append( Constants.ContentDelimeter );
+				m_outputControlbuffer.append( m_failureReason );
+				m_outputControlbuffer.append( Constants.ContentDelimeter );
+				m_outputControlbuffer.append( m_tableid );
+				m_outputControlbuffer.append( Constants.ContentDelimeter );
+				m_outputControlbuffer.append( "-1" );
+				m_outputControlbuffer.append( Constants.ContentDelimeter );
+				m_outputControlbuffer.append( "-1");
+				m_outputControlbuffer.append( Constants.ContentDelimeter );
+				m_outputControlbuffer.append( "-1");
+				m_outputControlbuffer.append( Constants.ContentDelimeter );
+				m_outputControlbuffer.append( "-1" );
+				m_outputControlbuffer.append( Constants.Seperator );
+				m_outputControlbuffer.append( Constants.Seperator );
+			}
+			return -1;
+
+		}
+        catch ( SQLException sqe )
+		{
+			sqe.printStackTrace();
+			m_outputControlbuffer = m_outputControlbuffer.append("Failure");
+			m_outputControlbuffer.append( sqe.getErrorCode() );
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "TABLE_IMPORT_EXCEPTION" );
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "Server is busy please try again" );
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( m_tableid );
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "-1" );
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "-1");
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "-1");
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "-1" );
+			m_outputControlbuffer.append( Constants.Seperator );
+			m_outputControlbuffer.append( Constants.Seperator );
+			return -1;
+        }
+        catch ( Exception e )
+        {
+			e.printStackTrace();
+            m_outputControlbuffer = m_outputControlbuffer.append("Failure");
+			m_outputControlbuffer.append( "-1");
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "TABLE_IMPORT_EXCEPTION" );
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( e.getMessage() );
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( m_tableid );
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "-1" );
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "-1");
+			m_outputControlbuffer.append( Constants.ContentDelimeter );;
+			m_outputControlbuffer.append( "-1");
+			m_outputControlbuffer.append( Constants.ContentDelimeter );
+			m_outputControlbuffer.append( "-1" );
+			m_outputControlbuffer.append( Constants.Seperator );
+			m_outputControlbuffer.append( Constants.Seperator );
+		   return -1;
+        }
+        finally
+        {
+          try
+          {
+            connection.close();
+          }
+          catch ( SQLException sql )
+          {
+            sql.printStackTrace();
+          }
+        }
+
+		m_outputControlbuffer = m_outputControlbuffer.append(rowv.size());
+		m_outputControlbuffer = m_outputControlbuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputControlbuffer = m_outputControlbuffer.append(colv.size());
+		m_outputControlbuffer = m_outputControlbuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+
+		// Now let us add rows and columns
+		xlColumn_import previousColumn = null;
+		for ( int c = 0; c < colv.size(); c++ )
+		{
+			xlColumn_import col = (xlColumn_import)colv.elementAt(c);
+
+			if ( maxTransactionId  < col.getCreationTid() )
+			{
+					maxTransactionId = col.getCreationTid();
+			}
+
+			if ( maxTransactionId  < col.getAccessTid() )
+			{
+					maxTransactionId = col.getAccessTid();
+			}
+			//col.print();
+
+			if ( previousColumn == null )
+			{
+
+				if ( col.getCreationTid() > TransactionId || (col.getAccessTid() > TransactionId && col.getPrevAccess() != col.getAccess() && col.getPrevAccess() == 0) )
+					addColumn ( c+1, col.getId(), col.getName(), "STRING" , col.getSequenceNumber(), -1, -1 ,col.getSourceColumnId(), "SI");
+				else
+					addColumn ( c+1, col.getId(), col.getName(),"STRING", col.getSequenceNumber(), -1, -1,col.getSourceColumnId(),"SU" );
+			}
+			else
+			{
+				if ( col.getCreationTid() > TransactionId || (col.getAccessTid() > TransactionId && col.getPrevAccess() != col.getAccess() && col.getPrevAccess() == 0) )
+					addColumn ( c+1, col.getId(), col.getName(),"STRING", col.getSequenceNumber(), c, previousColumn.getId() , col.getSourceColumnId(),"SI");
+				else
+					addColumn ( c+1, col.getId(), col.getName(),"SRTING", col.getSequenceNumber(), c, previousColumn.getId() , col.getSourceColumnId(),"SU" );
+			}
+
+			previousColumn = col;
+		}
+
+
+		int  previousRowId = -1;
+		//System.out.println(" Now adding  row buffer " );
+		for ( int r = 0; r < rowv.size(); r++ )
+		{
+			Row rowObject =(Row) rowv.elementAt(r);
+
+			if ( maxTransactionId  < rowObject.getCreationTid() )
+			{
+					maxTransactionId = rowObject.getCreationTid();
+			}
+
+			if ( maxTransactionId  < rowObject.getOwnershipAssignedTid() )
+			{
+					maxTransactionId = rowObject.getOwnershipAssignedTid();
+			}
+
+			//rowObject.print();
+
+
+			//System.out.println(" xl tid " + TransactionId );
+
+			if ( previousRowId == -1 )
+			{
+					if ( rowObject.getCreationTid() > TransactionId  ||  rowObject.getOwnershipAssignedTid() > TransactionId  )
+							addRow ( r+1, rowObject.getId(), r+1, -1, -1 ,"SI");
+					else
+							addRow ( r+1, rowObject.getId(), r+1, -1, -1 ,"SU");
+			}
+			else
+			{
+					if ( rowObject.getCreationTid() > TransactionId ||  rowObject.getOwnershipAssignedTid() > TransactionId )
+							addRow ( r+1, rowObject.getId(), r+1, r, previousRowId,"SI");
+					else
+							addRow ( r+1, rowObject.getId(), r+1, r, previousRowId,"SU");
+			}
+			previousRowId = rowObject.getId();
+		}
+
+		for( int clIndex = 0; clIndex < cellv.size(); clIndex++ )
+		{
+			VersionedCell c = (VersionedCell)cellv.elementAt(clIndex);
+			int columnid = c.getColumnId ();
+			int rowid = c.getRowId();
+			xlColumn_import colObject = (xlColumn_import)ColObjsByColId.get(new Integer(columnid));
+			Row rowObject =(Row) RowObjsByRowId.get(new Integer(rowid));
+			String columnname = colObject.getName();
+			String ctype = c.getType ();
+			String cval = c.getValueAsString ();
+			String cFormula = c.getFormula();
+			int colAccess = colObject.getAccess();
+			int cellAccess = java.lang.Math.min(raccess,colAccess);
+			//c.printCell();
+			if ( maxTransactionId  < c.getTransaction().getId() )
+			{
+				maxTransactionId = c.getTransaction().getId();
+			}
+
+			if ( c.getTransaction().getId() > TransactionId  )
+			{
+				addCell ( (new Integer(rowid)).toString(), (new Integer(columnid)).toString(), columnname, ctype,cval, c, cellAccess);
+			}
+			else
+			//if (  rowObject.getOwnerUserId() == userId &&  rowObject.getOwnershipAssignedTid() > TransactionId  )
+			if (rowObject.getOwnershipAssignedTid() > TransactionId)
+			{
+				 addCell ( (new Integer(rowid)).toString(), (new Integer(columnid)).toString(), columnname, ctype,cval, c,cellAccess);
+			}
+			else if (colObject.getAccessTid() > TransactionId && colObject.getPrevAccess() != colObject.getAccess())
+			{
+				 addCell ( (new Integer(rowid)).toString(), (new Integer(columnid)).toString(), columnname, ctype,cval, c,cellAccess);
+			}
+		}
+
+		if (  maxTransactionId == 0  && TransactionId > 0 )
+			maxTransactionId = TransactionId;
+
+		m_outputControlbuffer = m_outputControlbuffer.append(maxTransactionId);
+		m_outputControlbuffer = m_outputControlbuffer.append(httpt_vb_MyCollaborations.Seperator);
+		System.out.println("Time(sec) to write the buffer = " + (System.currentTimeMillis()-prevTime)/1000F);
+		prevTime = System.currentTimeMillis();
+		return 0;
+    }
+
+
+	public void addCell ( String r, String cl, String cn, String ct, String cv, VersionedCell c, int access )
+	{
+
+		m_outputDatabuffer = m_outputDatabuffer.append(r);
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(cl);
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(cn);
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(ct);
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(cv);
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		if (c.getFormula() != null)
+		{
+			m_outputDatabuffer = m_outputDatabuffer.append(c.getFormula());
+		}
+		else
+		{
+			m_outputDatabuffer = m_outputDatabuffer.append(" ");
+		}
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(new Integer(access));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.Seperator);
+	}
+
+
+    public void addColumn ( int colAddress,
+                            int colId,
+                            String colName,
+                            String colType,
+                            float colSequenceNumber,
+                            int prvColAddress,
+                            int prvColId,
+                            int refColId,
+                            String action ) {
+
+	    m_outputDatabuffer = m_outputDatabuffer.append(Integer.toString(colAddress));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(Integer.toString(colId));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+	    m_outputDatabuffer = m_outputDatabuffer.append(colName);
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+	    m_outputDatabuffer = m_outputDatabuffer.append(colType);
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(Float.toString(colSequenceNumber));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+	    m_outputDatabuffer = m_outputDatabuffer.append(Integer.toString(prvColAddress));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+	    m_outputDatabuffer = m_outputDatabuffer.append(Integer.toString(prvColId));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+	    m_outputDatabuffer = m_outputDatabuffer.append(Integer.toString(refColId));
+	    m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(action);
+	    m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.Seperator);
+
+    }
+
+
+public void addRow ( int rowAddress, int rowId, float rowSequenceNumber, int prvRowAddress, int prvRowId , String action)
+{
+
+	    m_outputDatabuffer = m_outputDatabuffer.append(Integer.toString(rowAddress));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(Integer.toString(rowId));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+		m_outputDatabuffer = m_outputDatabuffer.append(Float.toString(rowSequenceNumber));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+	    m_outputDatabuffer = m_outputDatabuffer.append(Integer.toString(prvRowAddress));
+		m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+	    m_outputDatabuffer = m_outputDatabuffer.append(Integer.toString(prvRowId));
+	    m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.ContentDelimeter);
+	    m_outputDatabuffer = m_outputDatabuffer.append(action);
+	    m_outputDatabuffer = m_outputDatabuffer.append(httpt_vb_MyCollaborations.Seperator);
+    }
+
+
+
+
+    public String getOutput ()
+    {
+		String returnBuffer = m_outputControlbuffer.toString() + m_outputDatabuffer.toString();
+		return returnBuffer;
+    }
+
+    public static void main(String[] args)
+    {
+
+    }
+}
+

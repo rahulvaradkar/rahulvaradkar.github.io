@@ -1,0 +1,527 @@
+
+	//Added by Rahul Varadkar on 24-February-2018 
+	public static String LinkExportTable(Connection connection, String userName, String pwd, String nhHierarchy, int tableId, int numColumns, int numRows, String columnInfo, String columnValues, String columnFormulas)			//throws BoardwalkException 
+	{
+		String linkExportResponseBuffer = "" ;
+		int userId;
+		int memberId;
+		int nhId;
+		String nhName;
+		String view = "LATEST";
+		String query;
+		// Failure String
+		String failureReason = "";
+		//String reqBuffer = getRequestBuffer(request).toString();
+		//BoardwalkRequestReader reader = getRequestReader(request);
+		//System.out.println(reqBuffer);
+		//String[] fullTableArr = reqBuffer.split(ContentDelimeter);
+		//System.out.println(fullTable);
+		//System.out.println("xlLinkExportService: Time to read the buffer = " + getElapsedTime());
+
+		JSONObject responseJsonBuffer = new JSONObject();;
+
+		PreparedStatement stmt		= null;
+		TransactionManager tm = null;
+		int tid = -1;
+
+		// Error vector to all the Exceptions
+		Vector xlErrorCells = new Vector(); //new Vector();
+		// access variables
+		boolean canAddRows = false;
+		boolean canDeleteRows = false;
+		boolean canAdministerColumns = false;
+
+		ArrayList	columnIds = null;
+		ArrayList	rowIds = null;
+		ArrayList	formulaIds = null;
+		ArrayList	strValIds = null;
+		String		formulaString = null;
+
+		int MAX_RETRY_ATTEMPTS = 5;
+		int RETRY_WAIT_TIME_MIN = 1000;
+		int RETRY_WAIT_TIME_MAX = 3000;
+		
+		try
+		{
+		//	MAX_RETRY_ATTEMPTS = Integer.parseInt(getServletConfig().getInitParameter("MAX_RETRY_ATTEMPTS"));
+		//	RETRY_WAIT_TIME_MIN = Integer.parseInt(getServletConfig().getInitParameter("RETRY_WAIT_TIME_MIN"));
+		//	RETRY_WAIT_TIME_MAX = Integer.parseInt(getServletConfig().getInitParameter("RETRY_WAIT_TIME_MAX"));
+			System.out.println("MAX_RETRY_ATTEMPTS=" + MAX_RETRY_ATTEMPTS);
+			System.out.println("RETRY_WAIT_TIME_MIN=" + RETRY_WAIT_TIME_MIN);
+			System.out.println("RETRY_WAIT_TIME_MAX=" + RETRY_WAIT_TIME_MAX);
+		}
+		catch (Exception e)
+		{
+			System.out.println("Deadlock parameters not set. Using defaults...");
+		}
+		StringBuffer responseToUpdate = null; //new StringBuffer();
+		String responseBuffer = null;
+
+		for (int ti = 0; ti < MAX_RETRY_ATTEMPTS; ti++)
+		{
+			responseToUpdate = new StringBuffer ();
+			responseBuffer = null;
+			
+			try
+			{
+				//processHeader(fullTableArr[0]);
+				//processLinkExportHeader(reader.getNextContent());
+
+				// Start a connection
+				DatabaseLoader databaseloader = new DatabaseLoader(new Properties());
+				connection = databaseloader.getConnection();
+
+				userId = UserManager.authenticateUser(connection, userName, pwd);
+
+				if ( userId > 0 )
+				{
+					Hashtable memberships  = UserManager.getMembershipsForUser( connection, userId );
+					//Added to get the Membership ID in case of Multiple Membership
+					memberId = UserManager.checkMembershipStatus(connection, userId, "", nhHierarchy, -1);
+					System.out.println("AdminTasks.LinkExportTable: Multiple Member Id: "+memberId);
+
+					if (memberId != -1)
+					{
+						nhId =((Member) memberships.get(new Integer(memberId))).getNeighborhoodId();
+						nhName = ((Member) memberships.get(new Integer(memberId))).getNeighborhoodName();
+						
+						//commitResponseBuffer("Success:" + userId + Seperator + memberId + Seperator + nhid + Seperator + nhName + Seperator, response);
+						System.out.println("status : Success");
+						System.out.println("userId :" + userId);
+						System.out.println("memberId : " + memberId);
+						System.out.println("nhId : " + nhId);
+						System.out.println("nhName : " + nhName);
+						System.out.println("Success:" + userId + Seperator + memberId + Seperator + nhId + Seperator + nhName + Seperator);
+					}
+					else
+					{
+						BoardwalkMessage bwmsg= new BoardwalkMessages().getBoardwalkMessage( 11007 );
+						//commitResponseBuffer("failure" + xlService.ContentDelimeter + bwmsg.getCause() + "," + bwmsg.getPotentialSolution(), response );
+						System.out.println("status : failure");
+						System.out.println("Cause" + bwmsg.getCause());
+						System.out.println("PotentialSolution" + bwmsg.getPotentialSolution());
+						linkExportResponseBuffer = "FAILURE" + ContentDelimeter +  bwmsg.getCause() + ", " + bwmsg.getPotentialSolution();
+						return linkExportResponseBuffer;
+					}
+
+					//	Access control checks
+					TableInfo tinfo = TableManager.getTableInfo(connection, userId, tableId);
+					TableAccessList ftal = TableViewManager.getSuggestedAccess(connection, tinfo, userId, memberId, nhId);
+					//if (view == null ||  view.trim().equals(""))
+					//{
+					//    view = ftal.getSuggestedViewPreferenceBasedOnAccess();
+					//    System.out.println("Suggested view pref = " + view);
+					//    if(view == null)
+					//        view = "None";
+					//}
+					// Check access control :: TBD
+					int raccess = 1;
+					int ACLFromDB = ftal.getACL();
+					TableAccessRequest wAccess = new TableAccessRequest(tableId, "LATEST", true);
+					int wACL = wAccess.getACL();
+					int awACL = wACL & ACLFromDB;
+
+					canAddRows				= ftal.canAddRow();
+					canDeleteRows			= ftal.canDeleteRow();
+					canAdministerColumns	= ftal.canAdministerColumn();
+
+				}
+				else
+				{
+					BoardwalkMessage bwmsg = null;
+					System.out.println(" Check here userId >>>>>>>>>"+userId);
+
+					if (userId == -1)
+					{
+						bwmsg= new BoardwalkMessages().getBoardwalkMessage( 11004 );
+					}
+					if (userId == 0)
+					{
+						bwmsg= new BoardwalkMessages().getBoardwalkMessage( 11006 );
+					}
+
+					//commitResponseBuffer("failure"+ xlService.ContentDelimeter+ bwmsg.getCause() + "," + bwmsg.getPotentialSolution(),response);
+					System.out.println("status : failure");
+					System.out.println("Cause : " + bwmsg.getCause());
+					System.out.println("PotentialSolution:" +bwmsg.getPotentialSolution());
+					linkExportResponseBuffer = "FAILURE" + ContentDelimeter +  bwmsg.getCause() + ", " + bwmsg.getPotentialSolution();
+					return linkExportResponseBuffer;
+				}
+
+								///////////////// not required
+								// authenticate the user
+					/*
+										Member memberObj = UserManager.authenticateMember(connection, userName,pwd, memberId);
+										if (memberObj == null)
+										{
+											System.out.println("Authentication failed for user : " + userName);
+											xlErrorCells.add( new xlErrorNew( tableId, 0, 0, 11004));
+											throw new BoardwalkException(11004);
+										}
+										else
+										{
+											System.out.println("Authentication succeeded for user : " + userName);
+											nhId = memberObj.getNeighborhoodId();
+											tm = new TransactionManager(connection, userId);
+											tid = tm.startTransaction("Link export new table", "Link export new table");
+										}
+										System.out.println("Time to authenticate user = " + getElapsedTime());
+					*/
+								///////////////// not required
+				tm = new TransactionManager(connection, userId);
+				tid = tm.startTransaction("Link export new table", "Link export new table");
+
+				if(canAdministerColumns == false)
+				{
+					// User does not have access to add columns
+					xlErrorCells.add( new xlErrorNew( tableId,0,0,12010));
+					System.out.println("No access to add column");
+				}
+
+				if(canAddRows == false)
+				{
+					xlErrorCells.add( new xlErrorNew( tableId,0,0,12012));
+					System.out.println("No access to add rows");
+				}
+				System.out.println("view = " + view);
+				if(view.equals("None"))
+				{
+					xlErrorCells.add( new xlErrorNew(tableId, 0, 0, 10005));
+				}
+
+
+				//processLinkExportHeader(reader.getNextContent()); ..........ENDS HERE
+
+				//processColumns(fullTableArr[1]);
+				//processLinkExportColumns(reader.getNextContent());
+
+				// If the user has access to add new Columns then procede forward
+				if(canAdministerColumns)
+				{
+					columnIds = new ArrayList(numColumns);
+					String[] columnNames = columnInfo.split(Seperator);
+					Vector columns = new Vector();
+					query = " INSERT INTO BW_COLUMN " +
+							   " (NAME, BW_TBL_ID, COLUMN_TYPE, SEQUENCE_NUMBER, TX_ID) " +
+							   " VALUES " +
+							   " (?,?,?,?,?)";
+
+					stmt = connection.prepareStatement(query);
+					// Add columns...Ignoring BWID so Starting from 1. numColumns was sent from client Ignoring bwid, so adding 1 
+					for (int cni = 1; cni < numColumns+1; cni++)
+					{
+						System.out.println("Adding column : " + columnNames[cni]);
+						stmt.setString(1, columnNames[cni]);
+						stmt.setInt(2, tableId);
+						stmt.setString(3, "STRING");
+						stmt.setFloat(4, cni + 1);
+						stmt.setInt(5, tid);
+						stmt.addBatch();
+					}
+					int[] rescnt = stmt.executeBatch();
+					stmt.clearBatch();
+					stmt.close();
+					stmt = null;
+				}
+
+				//HashMap columnHash = new HashMap();
+				ResultSet resultset = null;
+				query = "select id from bw_column where tx_id = ? order by sequence_number";
+				stmt = connection.prepareStatement(query);
+				stmt.setInt(1, tid);
+				resultset = stmt.executeQuery();
+				while (resultset.next())
+				{
+					int columnId = resultset.getInt(1);
+					//int columnIdx = resultset.getFloat (2);
+					columnIds.add (new Integer(columnId));
+					//columnHash.put (new Integer(columnIdx), new Integer(columnId));
+					//System.out.println("columnid = " + columnId);
+				}
+				stmt.close();
+				stmt = null;
+				resultset.close();
+				resultset = null;
+
+				//processLinkExportColumns(reader.getNextContent());  ........... ENDS HERE
+
+
+				// Add rows
+				System.out.println("xlLinkExportService:service() : userId = " + userId);
+				System.out.println("xlLinkExportService:service() : tableId = " + tableId);
+				System.out.println("xlLinkExportService:service() : tid = " + tid);
+				System.out.println("xlLinkExportService:service() : numRows = " + numRows);
+				System.out.println("xlLinkExportService:service() : numColumns = " + numColumns);
+				if (numRows > 0)
+				{
+					if (canAdministerColumns && canAddRows)
+						rowIds = TableManager.createRowsNewTable(connection, tableId, tid, userId, numRows);
+					//	System.out.println("xlLinkExportService: Time to create rows = " + getElapsedTime());
+					
+					// Insert into BW_RC_STRING_VALUE
+					String[] colValueArr = columnValues.split(ContentDelimeter);
+					String[] colFormulaArr = columnFormulas.split(ContentDelimeter);
+
+					// for (int i = 0; i < numColumns * 2; i = i + 2)
+					
+					for (int i = 0; i < numColumns ; i=i+1)
+					{
+						////int columnIdx = i / 2;
+						System.out.println("Processing column num = " + i);
+						//processColumnData(fullTableArr[i + 2], fullTableArr[i + 3], columnIdx);
+						////String cellBuff = reader.getNextContent();
+						////String fmlaBuff = reader.getNextContent();
+
+						String cellBuff = colValueArr[i];
+						String fmlaBuff = colFormulaArr[i];
+
+						System.out.println("cellBuff : " + cellBuff);
+						System.out.println("fmlaBuff : " + fmlaBuff);
+						System.out.println("rowIds : " + rowIds);
+						System.out.println("columnIds : " + columnIds);
+
+
+						processLinkExportColumnData(connection, cellBuff, fmlaBuff, i, rowIds, columnIds, numRows, tid);
+						cellBuff = null;
+						fmlaBuff = null;
+					}
+					//System.out.println("xlLinkExportService: Time to insert into rcsv table = " + getElapsedTime());
+
+					System.out.println("xlLinkExportService: xlErrorCells.size() " + xlErrorCells.size());
+					if (xlErrorCells.size() > 0)
+					{
+						throw new BoardwalkException(12011);
+					}
+
+					query = "{CALL BW_UPD_CELL_FROM_RCSV_LINK_EXPORT(?,?,?)}";
+					CallableStatement cstmt = connection.prepareCall(query);
+					cstmt.setInt(1, tid);
+					cstmt.setInt(2, tableId);
+					cstmt.setInt(3, userId);
+					int updCount = cstmt.executeUpdate();
+					cstmt.close();
+					cstmt = null;
+				//	System.out.println("xlLinkExportService: Time to execute BW_UPD_CELL_FROM_RCSV_LINK_EXPORT = " + getElapsedTime());
+				}
+				// commit the transaction
+				tm.commitTransaction();
+				tm = null;
+				//tm.rollbackTransaction(); // FOR NOW
+
+				// create the response
+				responseToUpdate.append("Success" + Seperator);
+				responseToUpdate.append(numColumns + Seperator);
+				responseToUpdate.append(numRows + Seperator);
+				responseToUpdate.append(tid + ContentDelimeter);
+
+				responseToUpdate.append(tableId + ContentDelimeter + memberId + ContentDelimeter);
+
+
+				JSONArray resJsonHeader = new JSONArray();
+				resJsonHeader.add("Success");
+				resJsonHeader.add(numColumns);
+				resJsonHeader.add(numRows);
+				resJsonHeader.add(tid);
+				resJsonHeader.add(tableId);
+				resJsonHeader.add(memberId);
+
+				System.out.println("Link Export Response : resJsonHeader = " + resJsonHeader.toString());
+
+				StringBuffer leRowIds = new StringBuffer();
+				int ri = 0;
+				int ci = 0;
+
+				for (ri = 0; ri < numRows - 1; ri++)
+				{
+					responseToUpdate.append(rowIds.get(ri) + Seperator);
+					leRowIds.append(rowIds.get(ri) + Seperator);
+				}
+
+				if (numRows > 0)
+				{
+					responseToUpdate.append(rowIds.get(ri) + ContentDelimeter);//last rowid
+					leRowIds.append(rowIds.get(ri));
+				}
+				else
+				{
+					responseToUpdate.append(ContentDelimeter);//last rowid
+				}
+
+				JSONArray  resJsonRowIds = new JSONArray ();
+				resJsonRowIds.add(leRowIds.toString());
+				System.out.println("Link Export Response : resJsonRowIds = " + resJsonRowIds.toString());
+
+
+				StringBuffer leColIds = new StringBuffer();
+				for (ci = 0; ci < numColumns - 1; ci++)
+				{
+					responseToUpdate.append(columnIds.get(ci) + Seperator);
+					leColIds.append(columnIds.get(ci) + Seperator);
+				}
+
+				responseToUpdate.append(columnIds.get(ci) + ContentDelimeter);//last columnid
+				leColIds.append(columnIds.get(ci));
+				System.out.println("Link Export Response : leColIds = " + leColIds.toString());
+				JSONArray resJsonColIds = new JSONArray();
+				resJsonColIds.add(leColIds.toString());
+
+				responseToUpdate.append(formulaString + ContentDelimeter);
+
+				responseJsonBuffer.put("header", resJsonHeader);
+				responseJsonBuffer.put("resJsonRowIds", resJsonRowIds);
+				responseJsonBuffer.put("resJsonColIds", resJsonColIds);
+				
+				//not done
+				//responseJsonBuffer.put("objCellData", objCellData);
+
+
+				ti = MAX_RETRY_ATTEMPTS; // dont try again
+
+				failureReason = "";
+			}
+			catch (SQLException sqe)
+			{
+
+				sqe.printStackTrace();
+				try
+				{
+					if (tm != null)
+						tm.rollbackTransaction();
+				}
+				catch (Exception e1)
+				{
+					e1.printStackTrace();
+				}
+				if (sqe.getErrorCode() == 1205)
+				{
+					if (ti == MAX_RETRY_ATTEMPTS - 1)
+					{
+						failureReason = (new xlErrorNew(tableId, 0, 0, 13001)).buildTokenString();
+						System.out.println("xlLinkExportService: Deadlock maximum attempts exhausted. Sending server busy message to client ");
+						System.out.println("xlLinkExportService:failureReason = " + failureReason);
+					}
+					System.out.println("xlLinkExportService:Deadlock attempt number = " + (ti + 1) + " out of max = " + MAX_RETRY_ATTEMPTS);
+					//sqe.printStackTrace();
+					try
+					{
+						int sleepTime = RETRY_WAIT_TIME_MIN + (new Random()).nextInt(RETRY_WAIT_TIME_MAX - RETRY_WAIT_TIME_MIN);
+						System.out.println("Sleeping for " + sleepTime + "ms");
+						Thread.sleep(sleepTime);
+					}
+					catch (InterruptedException e)
+					{
+						e.printStackTrace();
+					}
+				}
+				else
+				{
+					failureReason = sqe.getMessage();
+					ti = MAX_RETRY_ATTEMPTS; // dont try again
+				}
+
+			}
+			catch (BoardwalkException bwe)
+			{
+				ti = MAX_RETRY_ATTEMPTS; // dont try again
+				bwe.printStackTrace();
+				if (xlErrorCells.size() > 0)
+				{
+					StringBuffer errorBuffer = new StringBuffer();
+
+					for (int errorIndex = 0; errorIndex < xlErrorCells.size(); errorIndex++)
+					{
+						xlErrorNew excelError = (xlErrorNew)(xlErrorCells.elementAt(errorIndex));
+						errorBuffer.append(excelError.buildTokenString());
+					}
+					errorBuffer.append(Seperator);
+					failureReason = errorBuffer.toString();
+					try
+					{
+						if (tm != null)
+							tm.rollbackTransaction();
+					}
+					catch (Exception e1)
+					{
+						e1.printStackTrace();
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				ti = MAX_RETRY_ATTEMPTS; // dont try again
+				e.printStackTrace();
+				try
+				{
+					if (tm != null)
+						tm.rollbackTransaction();
+				}
+				catch (Exception e1)
+				{
+					e1.printStackTrace();
+				}
+				failureReason = e.getMessage();
+			}
+			finally
+			{
+				// close the connection
+				try
+				{
+					//reader.close();
+					connection.close();
+				}
+				catch (Exception e)
+				{
+					e.printStackTrace();
+				}
+				// clean up
+				numColumns = 0;
+				numRows = 0;
+				tableId = -1;
+				nhId = -1;
+
+				columnIds = null;
+				rowIds = null;
+				formulaIds = null;
+				strValIds = null;
+				formulaString = null;
+
+				userId = -1;
+				userName = "";
+				//userPassword = "";
+				memberId = -1;
+				//formulaArray = null;
+				view = null;
+				query = "";
+				xlErrorCells = null;
+				
+				canAddRows = false;
+				canDeleteRows = false;
+				canAdministerColumns = false;
+
+				connection = null;
+				stmt = null;
+				tm = null;
+				tid = -1;
+			}
+		}
+		// The response
+		if (failureReason.length() == 0)
+		{
+			//responseBuffer = responseToUpdate.toString();
+
+			//linkExportResponseBuffer = responseToUpdate.toString();
+			linkExportResponseBuffer = responseJsonBuffer.toString();
+			//System.out.println("AdminTask.LinkExport: responseToUpdate = " + responseToUpdate.toString());
+			System.out.println("AdminTask.LinkExport: linkExportResponseBuffer = " + linkExportResponseBuffer);
+		}
+		else
+		{
+			failureReason = "FAILURE" + ContentDelimeter + failureReason;
+			System.out.println("AdminTask.LinkExport: failureReason = " + failureReason);
+			linkExportResponseBuffer = failureReason;
+		}
+		return linkExportResponseBuffer; 
+	}
+
+
+	

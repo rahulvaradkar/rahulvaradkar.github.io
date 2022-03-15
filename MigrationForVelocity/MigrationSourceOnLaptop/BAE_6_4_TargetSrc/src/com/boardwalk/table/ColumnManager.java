@@ -1,0 +1,997 @@
+/*
+ * ColumnManager.java
+ *
+ * Created on April 25, 2000, 2:36 PM
+ */
+
+package com.boardwalk.table;
+
+/**
+ *
+ * @author  administrator
+ * @version
+ */
+
+import com.boardwalk.database.DatabaseLoader;
+import com.boardwalk.exception.NeighborhoodException;
+import com.boardwalk.exception.SystemException;
+import com.boardwalk.database.*;
+import com.boardwalk.excel.xlColumn_import;
+
+import java.sql.*;                  // JDBC package
+import javax.sql.*;                 // extended JDBC package
+import java.util.*;
+
+/**
+ *
+ * @author  administrator
+ * @version
+ */
+
+
+public class ColumnManager
+{
+
+	private static String CALL_BW_GET_COLUMNS_BY_TBL_ID = "{CALL BW_GET_COLUMNS_BY_TBL_ID(?,?,?)}";
+	private static String CALL_BW_GET_COLUMNS_BY_TBL_ID_T = "{CALL BW_GET_COLUMNS_BY_TBL_ID_T(?,?,?,?,?)}";
+	private static String CALL_BW_GET_COLUMNS_BL_TBL = "{CALL BW_GET_COLUMNS_BL_TBL(?,?,?,?)}";
+	private static String CALL_BW_GET_XL_COLS = "{CALL BW_GET_XL_COLS(?,?,?)}";
+
+	private static String CALL_DEACTIVATE_COLUMN_BY_NAME="{CALL DEACTIVATE_COLUMN_BY_NAME(?,?,?)}";
+	private static String CALL_BW_DEACTIVATE_COLUMN = "{CALL BW_DEACTIVATE_COLUMN(?,?)}";
+	private static String CALL_BW_UPD_COLUMN = "{CALL BW_UPD_COLUMN(?,?,?,?,?,?,?,?,?,?)}";
+	private static String CALL_BW_GET_LOOKUP_TBL_FOR_COLUMN = "{CALL BW_GET_LOOKUP_TBL_FOR_COLUMN(?,?,?)}";
+	private static String CALL_BW_RENAME_COLUMN = "{CALL BW_RENAME_COLUMN(?,?)}";
+	private static String CALL_BW_GET_COL_ACCESS = "{CALL BW_GET_COL_ACCESS(?)}";
+	private static String CALL_BW_DEL_COL_ACCESS = "{CALL BW_DEL_COL_ACCESS(?)}";
+	private static String CALL_BW_ADD_COL_ACCESS = "{CALL BW_ADD_COL_ACCESS(?,?,?)}";
+	private static String CALL_BW_ADD_COL_ACCESS_ALL = "{CALL BW_ADD_COL_ACCESS_ALL(?, ?)}";
+	private static String CALL_BW_UPD_COL_ACCESS = "{CALL BW_UPD_COL_ACCESS(?,?,?,?)}";
+	/** Creates new ColumnManager */
+	public ColumnManager()
+	{
+	}
+	public static Hashtable getOrderedColumnValues(Connection connection, int column_id)
+	throws SystemException
+	{
+
+		// ONLY WORKS FOR A STRING COLUMN TBD
+		ResultSet resultset = null;
+		PreparedStatement preparedstatement = null;
+		Hashtable cells = new Hashtable();
+
+		try
+		{
+			String CALL_BW_GET_ORD_COL = "{CALL BW_GET_ORD_COL(?)}";
+			preparedstatement = connection.prepareStatement(CALL_BW_GET_ORD_COL);
+			preparedstatement.setInt(1, column_id);
+			resultset = preparedstatement.executeQuery();
+			int seqId = 0;
+
+			while (resultset.next())
+			{
+				String a_stringValue = resultset.getString("string_value");
+				cells.put(a_stringValue, new Integer(seqId));
+				seqId++;
+			}
+
+		}
+		catch (SQLException sqlexception)
+		{
+			sqlexception.printStackTrace();
+			throw new SystemException(sqlexception);
+		}
+		finally
+		{
+			try
+			{
+				if (resultset != null)
+				{
+					resultset.close();
+				}
+				if (preparedstatement != null)
+				{
+					preparedstatement.close();
+				}
+			}
+			catch (SQLException sqlexception1)
+			{
+
+				sqlexception1.printStackTrace();
+				throw new SystemException(sqlexception1);
+			}
+		}
+
+		System.out.println("getOrderedColumnConfiguration :  cells = " + cells);
+		return cells;
+	}
+
+	public static void renameColumn(Connection connection,
+									int colId,
+									String colName)
+	throws SystemException
+	{
+		CallableStatement callableStatement = null;
+		try
+		{
+			callableStatement = connection.prepareCall(CALL_BW_RENAME_COLUMN);
+			callableStatement.setInt(1, colId);
+			callableStatement.setString(2, colName);
+
+			callableStatement.executeUpdate();
+		}
+		catch (SQLException sql1)
+		{
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				callableStatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw new SystemException(sql2);
+			}
+		}
+	}
+	public static Vector getLookupForColumn(Connection connection, int colId)
+	throws SQLException
+	{
+		CallableStatement callablestatement = null;
+		Vector lkp_tid_cid = null;
+		try
+		{
+
+			callablestatement = connection.prepareCall(CALL_BW_GET_LOOKUP_TBL_FOR_COLUMN);
+			callablestatement.setInt(1, colId);
+			callablestatement.registerOutParameter(2, java.sql.Types.INTEGER);
+			callablestatement.registerOutParameter(3, java.sql.Types.INTEGER);
+
+			int l = callablestatement.executeUpdate();
+
+			int lookupTableId = callablestatement.getInt(2);
+			int lookupColumnId = callablestatement.getInt(3);
+
+			lkp_tid_cid = new Vector();
+			lkp_tid_cid.addElement(new Integer(lookupTableId));
+			lkp_tid_cid.addElement(new Integer(lookupColumnId));
+
+		}
+		catch (SQLException sql1)
+		{
+			throw sql1;
+		}
+		finally
+		{
+			try
+			{
+				callablestatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw sql2;
+			}
+		}
+
+		return lkp_tid_cid;
+	}
+
+	public static void saveColumnAccess(Connection connection,
+											int tableId,
+											Vector columns,
+											Vector relationships,
+											Vector accessList,
+											int tid)
+	throws SystemException
+	{
+		CallableStatement callableStatement = null;
+
+		try
+		{
+			ColumnAccessList cal = ColumnManager.getColumnAccess(connection, tableId);
+			Hashtable acc = cal.getAccess();
+			callableStatement = connection.prepareCall(CALL_BW_UPD_COL_ACCESS);
+			for (int i = 0; i < columns.size(); i++)
+			{
+				int columnId = Integer.parseInt((String)columns.elementAt(i));
+				String rel = (String)relationships.elementAt(i);
+				int access = Integer.parseInt((String)accessList.elementAt(i));
+				Integer accInt = (Integer)acc.get(rel + ":" + columnId);
+				int currentAccess = access;
+				if (accInt != null)
+				{
+					currentAccess = accInt.intValue();
+				}
+				if (currentAccess != access)
+				{
+					System.out.println("Setting Access control for column id = " + columnId + " for relationship = " + rel + "to access = " + access);
+					callableStatement.setInt(1, columnId);
+					callableStatement.setString(2, rel);
+					callableStatement.setInt(3, access);
+					callableStatement.setInt(4, tid);
+					callableStatement.addBatch();
+				}
+			}
+			int updRes[] = callableStatement.executeBatch();
+		}
+
+		catch (SQLException sql1)
+		{
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				callableStatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw new SystemException(sql2);
+			}
+		}
+	}
+
+	public static boolean deleteColumn(Connection connection, int colId, int tid)
+	    throws SystemException
+	{
+		boolean lbDeleted = false ;
+		CallableStatement callableStatement = null;
+		int liCount = -1;
+
+		try
+		{
+			System.out.println("ColumnManager::deleteColumn -> Calling BW_DEACTIVATE_COLUMN with colId = " + colId);
+			callableStatement = connection.prepareCall(CALL_BW_DEACTIVATE_COLUMN);
+			callableStatement.setInt(1, colId);
+			callableStatement.setInt(2, tid);
+			liCount = callableStatement.executeUpdate();
+			if(liCount > 0 )
+				lbDeleted = true;
+		}
+		catch (SQLException sql1)
+		{
+			lbDeleted = false ;
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				callableStatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				lbDeleted = false ;
+				throw new SystemException(sql2);
+			}
+		}
+		return lbDeleted;
+	}
+
+    public static void deleteColumn(Connection connection, String asColName, int aiTid, int aiTableId )
+	    throws SystemException
+	{
+		CallableStatement callableStatement = null;
+		int liCount = -1;
+
+		try {
+			System.out.println("ColumnManager:: Deteting Column Named -> " + asColName);
+			callableStatement = connection.prepareCall(CALL_DEACTIVATE_COLUMN_BY_NAME);
+			callableStatement.setString(1, asColName);
+			callableStatement.setInt(2, aiTid);
+			callableStatement.setInt(3, aiTableId);
+
+			liCount = callableStatement.executeUpdate();
+		} catch (SQLException sql1) {
+			throw new SystemException(sql1);
+		} finally {
+			try {
+				callableStatement.close();
+			} catch (SQLException sql2) {
+				throw new SystemException(sql2);
+			}
+		}
+	}
+
+	public static void updateColumn(Connection connection,
+									 int colId,
+									 String colName,
+									 String default_string_value,
+									 int default_int_value,
+									 double default_dbl_value,
+									 int lookupTableId,
+									 int trackingTableId,
+									 int tid,
+									 int lookupColumnId,
+									 int trackingColumnId)
+	    throws SystemException
+	{
+		CallableStatement callableStatement = null;
+		System.out.println("lookupTableId = " + lookupTableId + " trackingTableId =  " + trackingTableId);
+		System.out.println("lookupColumnId = " + lookupColumnId + " trackingColumnId =  " + trackingColumnId);
+		try
+		{
+			callableStatement = connection.prepareCall(CALL_BW_UPD_COLUMN);
+			callableStatement.setInt(1, colId);
+			callableStatement.setString(2, colName);
+			callableStatement.setString(3, default_string_value);
+			callableStatement.setInt(4, default_int_value);
+			callableStatement.setDouble(5, default_dbl_value);
+			callableStatement.setInt(6, lookupTableId);
+			callableStatement.setInt(7, trackingTableId);
+			callableStatement.setInt(8, lookupColumnId);
+			callableStatement.setInt(9, trackingColumnId);
+			callableStatement.setInt(10, tid);
+
+
+
+			callableStatement.executeUpdate();
+		}
+		catch (SQLException sql1)
+		{
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				callableStatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw new SystemException(sql2);
+			}
+		}
+	}
+
+	public static void deleteColumnAccess(Connection connection, int columnId, int tid)
+	throws SystemException
+	{
+		CallableStatement callableStatement = null;
+		try
+		{
+			callableStatement = connection.prepareCall(CALL_BW_DEL_COL_ACCESS);
+			callableStatement.setInt(1, columnId);
+			callableStatement.executeUpdate();
+		}
+		catch (SQLException sql1)
+		{
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				callableStatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw new SystemException(sql2);
+			}
+		}
+	}
+
+	public static void addNewColumnAccess(Connection connection, int columnId, int tid)
+	throws SystemException
+	{
+		CallableStatement callableStatement = null;
+		int default_access = 0;
+		//System.out.println("ColumnManager::addNewColumnAccess called for columnId = " + columnId);
+		try
+		{
+			callableStatement = connection.prepareCall(CALL_BW_ADD_COL_ACCESS);
+			callableStatement.setInt(1, columnId);
+			callableStatement.setInt(2, default_access);
+			callableStatement.setInt(3, tid);
+			callableStatement.executeUpdate();
+		}
+		catch (SQLException sql1)
+		{
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				callableStatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw new SystemException(sql2);
+			}
+		}
+	}
+
+	public static void updateColumnAccess(Connection connection, int columnId, String rel, int access, int tid)
+	throws SystemException
+	{
+		CallableStatement callableStatement = null;
+		try
+		{
+			callableStatement = connection.prepareCall(CALL_BW_UPD_COL_ACCESS);
+			callableStatement.setInt(1, columnId);
+			callableStatement.setString(2, rel);
+			callableStatement.setInt(3, access);
+			callableStatement.setInt(4, tid);
+			callableStatement.executeUpdate();
+		}
+		catch (SQLException sql1)
+		{
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				callableStatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw new SystemException(sql2);
+			}
+		}
+	}
+
+
+
+	public static void updateColumnAccessBatch(Connection connection, Vector columnIds, Vector rels, Vector access, int tid)
+		throws SystemException
+	{
+		CallableStatement callableStatement = null;
+
+		try
+		{
+			callableStatement = connection.prepareCall(CALL_BW_UPD_COL_ACCESS);
+
+			for (int i = 0; i < columnIds.size(); i++)
+			{
+
+
+
+				callableStatement.setInt(1, ((Integer)columnIds.elementAt(i)).intValue());
+				callableStatement.setString(2, (String)rels.elementAt(i));
+				callableStatement.setInt(3, ((Integer)access.elementAt(i)).intValue());
+				callableStatement.setInt(4, tid);
+				callableStatement.addBatch();
+
+
+			}
+
+			callableStatement.executeBatch();
+
+		}
+		catch (SQLException sql1)
+		{
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				callableStatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw new SystemException(sql2);
+			}
+		}
+
+	}
+	public static void restrictAllColumns(Connection connection, int tableId, int tid)
+	throws SystemException
+	{
+		CallableStatement callableStatement = null;
+		try
+		{
+			callableStatement = connection.prepareCall(CALL_BW_ADD_COL_ACCESS_ALL);
+			callableStatement.setInt(1, tableId);
+			callableStatement.setInt(2, tid);
+			callableStatement.executeUpdate();
+		}
+		catch (SQLException sql1)
+		{
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				callableStatement.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw new SystemException(sql2);
+			}
+		}
+	}
+
+	public static ColumnAccessList getColumnAccess(Connection connection, int tableId)
+ throws SystemException
+	{
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		ColumnAccessList cal = new ColumnAccessList();
+		Vector columns = cal.getColumns();
+		Hashtable acc = cal.getAccess();
+		try
+		{
+
+			ps = connection.prepareStatement(CALL_BW_GET_COL_ACCESS);
+			ps.setInt(1, tableId);
+			rs = ps.executeQuery();
+
+			while (rs.next())
+			{
+				int col_id;
+				String rel;
+				int access;
+
+				col_id = rs.getInt(1);
+				rel = rs.getString(2);
+				access = rs.getInt(3);
+
+				if (!columns.contains(new Integer(col_id)))
+				{
+					columns.add(new Integer(col_id));
+				}
+
+				acc.put(rel + ":" + col_id, new Integer(access));
+
+			}
+
+		}
+		catch (SQLException sql1)
+		{
+			throw new SystemException(sql1);
+		}
+		finally
+		{
+			try
+			{
+				ps.close();
+			}
+			catch (SQLException sql2)
+			{
+				throw new SystemException(sql2);
+
+			}
+		}
+
+		return cal;
+
+	}
+
+	public static HashMap getAccesibleColumns(Connection connection, int tableId, int userId, int memberId)
+ throws SystemException
+	{
+		String q1 = "select colid, access_ from BW_GetColumnAccess(?, ?, ?)";
+
+		PreparedStatement preparedstatement = null;
+		ResultSet resultset_r = null;
+		HashMap accCols = new HashMap();
+		try
+		{
+			preparedstatement = connection.prepareStatement(q1);
+			preparedstatement.setInt(1, tableId);
+			preparedstatement.setInt(2, userId);
+			preparedstatement.setInt(3, memberId);
+			resultset_r = preparedstatement.executeQuery();
+
+			while (resultset_r.next())
+			{
+				int cid = resultset_r.getInt("COLID");
+				int acc = resultset_r.getInt("ACCESS_");
+
+				accCols.put(new Integer(cid), new Integer(acc));
+			}
+		}
+		catch (SQLException e)
+		{
+			e.printStackTrace();
+			throw new SystemException(e);
+		}
+		finally
+		{
+			try
+			{
+				if (preparedstatement != null)
+					preparedstatement.close();
+			}
+			catch (SQLException sqe)
+			{
+				sqe.printStackTrace();
+				throw new SystemException(sqe);
+			}
+		}
+
+		return accCols;
+	}
+
+	public static Vector getXlColumnsForImport(Connection connection, int tableId, int userId, int memberId)
+ throws SystemException
+	{
+		PreparedStatement preparedstatement = null;
+		ResultSet resultset_r = null;
+		Vector xlColumns = null;
+		try
+		{
+			preparedstatement = connection.prepareStatement(CALL_BW_GET_XL_COLS);
+			preparedstatement.setInt(1, tableId);
+			preparedstatement.setInt(2, userId);
+			preparedstatement.setInt(3, memberId);
+			resultset_r = preparedstatement.executeQuery();
+			xlColumns = new Vector();
+			while (resultset_r.next())
+			{
+				int cid = resultset_r.getInt("ID");
+				String name = resultset_r.getString("NAME");
+				float sqNo = resultset_r.getFloat("SEQUENCE_NUMBER");
+				int colTid = resultset_r.getInt("TX_ID");
+				int acc = resultset_r.getInt("ACCESS_");
+				int prevAccess = resultset_r.getInt("PREV_ACCESS");
+				int accessTid = resultset_r.getInt("ACCESS_TID");
+				int source = resultset_r.getInt("SOURCE");
+				int lkpColId = resultset_r.getInt("LOOKUP_COLUMN_ID");
+				int lkpTblId = resultset_r.getInt("LOOKUP_TBL_ID");
+				String attr = resultset_r.getString("ATTR");
+				if (attr == null)
+					attr = "";
+				xlColumns.addElement(new xlColumn_import(cid, name, sqNo, colTid, acc, prevAccess, accessTid, source, lkpColId, lkpTblId, attr));
+			}
+		}
+		catch (SQLException e)
+		{
+			e.printStackTrace();
+			throw new SystemException(e);
+		}
+		finally
+		{
+			try
+			{
+				if (preparedstatement != null)
+					preparedstatement.close();
+			}
+			catch (SQLException sqe)
+			{
+				sqe.printStackTrace();
+				throw new SystemException(sqe);
+			}
+		}
+
+		return xlColumns;
+	}
+
+
+	public static TableColumnInfo getTableColumnInfo(
+								   Connection connection,
+								   int a_table_id,
+								   int a_baseline_id,
+								   int a_user_id,
+								   int a_member_id,
+								   int asOfTid,
+								   String requestedColumns)
+  throws SystemException
+	{
+		ResultSet resultset1 = null;
+		PreparedStatement preparedstatement1 = null;
+		Hashtable columns = new Hashtable();
+		Vector columnsVec = new Vector();
+
+
+		//System.out.println("ColumnManager::getColumnsByTable() called for a_table_id = " + a_table_id);
+		try
+		{
+			if (a_baseline_id < 0)
+			{
+				if (asOfTid < 0)
+				{
+					//System.out.println("a_user_id = " + a_user_id);
+					preparedstatement1 = connection.prepareStatement(CALL_BW_GET_COLUMNS_BY_TBL_ID);
+					preparedstatement1.setInt(1, a_table_id);
+					preparedstatement1.setInt(2, a_user_id);
+					preparedstatement1.setInt(3, a_member_id);
+				}
+				else
+				{
+					System.out.println("calling CALL_BW_GET_COLUMNS_BY_TBL_ID_T");
+					preparedstatement1 = connection.prepareStatement(CALL_BW_GET_COLUMNS_BY_TBL_ID_T);
+					preparedstatement1.setInt(1, a_table_id);
+					preparedstatement1.setInt(2, a_user_id);
+					preparedstatement1.setInt(3, a_member_id);
+					preparedstatement1.setInt(4, asOfTid);
+					preparedstatement1.setString(5, requestedColumns);
+				}
+
+			}
+			else
+			{
+				preparedstatement1 = connection.prepareStatement(CALL_BW_GET_COLUMNS_BL_TBL);
+				preparedstatement1.setInt(1, a_table_id);
+				preparedstatement1.setInt(2, a_baseline_id);
+				preparedstatement1.setInt(3, a_user_id);
+				preparedstatement1.setInt(4, a_member_id);
+			}
+
+			resultset1 = preparedstatement1.executeQuery();
+
+			while (resultset1.next())
+			{
+				int a_column_id;
+				String a_column_name;
+				String a_column_type;
+				float a_column_sequence_number;
+
+				String a_default_string_value;
+				int a_default_integer_value;
+				double a_default_double_value;
+				int a_default_table_value;
+
+				int is_enumerated;
+				int lookupTableId;
+				int lookupColumnId;
+				int access;
+				int prevAccess;
+				int access_tid;
+
+				a_column_id = resultset1.getInt("COLUMN_ID");
+				a_column_name = resultset1.getString("COLUMN_NAME");
+				a_column_type = resultset1.getString("COLUMN_TYPE");
+				a_column_sequence_number = resultset1.getFloat("COLUMN_SEQUENCE_NUMBER");
+
+				a_default_string_value = resultset1.getString("DEFAULT_STRING_VALUE");
+				a_default_integer_value = resultset1.getInt("DEFAULT_INTEGER_VALUE");
+				a_default_double_value = resultset1.getDouble("DEFAULT_FLOAT_VALUE");
+				a_default_table_value = resultset1.getInt("DEAFULT_TBL_VALUE");
+
+				is_enumerated = resultset1.getInt("IS_ENUMERATED");
+				lookupTableId = resultset1.getInt("LOOKUP_TBL_ID");
+				lookupColumnId = resultset1.getInt("LOOKUP_COLUMN_ID");
+
+				String default_value = resultset1.getString("LOOKUP_STRING_VALUE");
+				int int_default_value = resultset1.getInt("LOOKUP_INTEGER_VALUE");
+				double dbl_default_value = resultset1.getDouble("LOOKUP_DOUBLE_VALUE");
+				int tbl_default_value = resultset1.getInt("LOOKUP_TBL_VALUE");
+				String tbl_name = resultset1.getString("LOOKUP_TBL_NAME");
+				String tbl_view_preference = resultset1.getString("LKP_TBL_VIEW_PREF_TYPE");
+
+				int col_tid = resultset1.getInt("COL_TID");
+				int col_isActive = resultset1.getInt("COL_ACTIVE");
+				int a_ordered_tbl_id = resultset1.getInt("ORDERED_LIST_TBL_ID");
+				int a_ordered_column_id = resultset1.getInt("ORDERED_LIST_TBL_COLUMN_ID");
+				String a_ordered_type = resultset1.getString("ORDER_TYPE");
+				String a_ordered_table_name = resultset1.getString("ORDERED_TBL_NAME");
+				String a_lookupcolumns_tablename = resultset1.getString("LOOKUP_TBLNAME");
+
+				access = resultset1.getInt("access_");
+				prevAccess = resultset1.getInt("prev_access");
+				access_tid = resultset1.getInt("access_tid");
+				int source_col_id = resultset1.getInt("SOURCE");
+				if (is_enumerated == 0)
+				{
+
+					Column col = new Column(a_column_id,
+											 a_column_name,
+											 a_column_type,
+											 a_column_sequence_number,
+											 a_default_string_value,
+											 a_default_integer_value,
+											 a_default_double_value,
+											 a_default_table_value,
+											 false,
+											 new Vector(),
+											 -1,
+											 -1,
+											 col_tid,
+											 col_isActive,
+											 a_ordered_tbl_id,
+											 a_ordered_column_id,
+											 a_ordered_type,
+											 a_ordered_table_name,
+											 a_lookupcolumns_tablename,
+											 access,
+											 prevAccess,
+											 access_tid,
+											 source_col_id);
+					columns.put(new Integer(a_column_id), col);
+					columnsVec.add(col);
+
+				}
+				else
+				{
+					if (columns.get(new Integer(a_column_id)) == null)
+					{
+						Column col = new Column(a_column_id,
+												a_column_name,
+												a_column_type,
+												a_column_sequence_number,
+												a_default_string_value,
+												a_default_integer_value,
+												a_default_double_value,
+												a_default_table_value,
+												true,
+												new Vector(),
+												lookupTableId,
+												lookupColumnId,
+												col_tid,
+												col_isActive,
+												a_ordered_tbl_id,
+												a_ordered_column_id,
+												a_ordered_type,
+												a_ordered_table_name,
+												a_lookupcolumns_tablename,
+												access,
+												prevAccess,
+												access_tid,
+												source_col_id);
+						columns.put(new Integer(a_column_id), col);
+						columnsVec.add(col);
+
+					}
+
+					if (a_column_type.equals("STRING"))
+					{
+
+						if (default_value != null)
+						{
+
+							((Column)columns.get(new Integer(a_column_id))).getEnumerations().add(default_value);
+							//System.out.println("Adding enumeration " +  default_value + " to " +  a_column_name  +"  enum size so far is " + (  (Column)    columns.get(new Integer(a_column_id))   ).getEnumerations().size()   );
+
+						}
+					}
+					else if (a_column_type.equals("INTEGER"))
+					{
+
+						((Column)columns.get(new Integer(a_column_id))).getEnumerations().add(new Integer(int_default_value));
+
+
+					}
+					else if (a_column_type.equals("FLOAT"))
+					{
+
+						((Column)columns.get(new Integer(a_column_id))).getEnumerations().add(new Double(dbl_default_value));
+
+
+					}
+					else if
+						(a_column_type.equals("TABLE"))
+					{
+
+
+
+
+						TableCellValue tbl_cell_value = new TableCellValue(tbl_default_value, tbl_name, tbl_view_preference);
+
+						((Column)columns.get(new Integer(a_column_id))).getEnumerations().add(tbl_cell_value);
+
+					}
+
+
+				}
+			}
+
+		}
+		catch (SQLException sqlexception)
+		{
+			throw new SystemException(sqlexception);
+
+		}
+		finally
+		{
+			try
+			{
+				if (resultset1 != null)
+					resultset1.close();
+
+				if (preparedstatement1 != null)
+					preparedstatement1.close();
+
+			}
+			catch (SQLException sqlexception1)
+			{
+				throw new SystemException(sqlexception1);
+			}
+		}
+
+		System.out.println(" column size " + columnsVec.size() + "  " + columns.size());
+		return new TableColumnInfo(a_table_id, columnsVec, columns);
+
+	}
+
+	public static Vector getTableColumnIds(
+								 Connection connection,
+								 int a_table_id,
+								 int a_baseline_id,
+								 int a_user_id,
+								 int a_member_id,
+								 int asOfTid,
+								 String requestedColumns)
+  throws SystemException
+	{
+		ResultSet resultset1 = null;
+		PreparedStatement preparedstatement1 = null;
+		Vector columnsVec = new Vector();
+
+
+		//System.out.println("ColumnManager::getColumnsByTable() called for a_table_id = " + a_table_id);
+		try
+		{
+			if (a_baseline_id < 0)
+			{
+				if (asOfTid < 0)
+				{
+					//System.out.println("a_user_id = " + a_user_id);
+					preparedstatement1 = connection.prepareStatement(CALL_BW_GET_COLUMNS_BY_TBL_ID);
+					preparedstatement1.setInt(1, a_table_id);
+					preparedstatement1.setInt(2, a_user_id);
+					preparedstatement1.setInt(3, a_member_id);
+				}
+				else
+				{
+					System.out.println("calling CALL_BW_GET_COLUMNS_BY_TBL_ID_T");
+					preparedstatement1 = connection.prepareStatement(CALL_BW_GET_COLUMNS_BY_TBL_ID_T);
+					preparedstatement1.setInt(1, a_table_id);
+					preparedstatement1.setInt(2, a_user_id);
+					preparedstatement1.setInt(3, a_member_id);
+					preparedstatement1.setInt(4, asOfTid);
+					preparedstatement1.setString(5, requestedColumns);
+				}
+
+			}
+			else
+			{
+				preparedstatement1 = connection.prepareStatement(CALL_BW_GET_COLUMNS_BL_TBL);
+				preparedstatement1.setInt(1, a_table_id);
+				preparedstatement1.setInt(2, a_baseline_id);
+				preparedstatement1.setInt(3, a_user_id);
+				preparedstatement1.setInt(4, a_member_id);
+			}
+
+			resultset1 = preparedstatement1.executeQuery();
+
+			while (resultset1.next())
+			{
+				int a_column_id;
+				a_column_id = resultset1.getInt("COLUMN_ID");
+				columnsVec.addElement(new Integer(a_column_id));
+			}
+
+		}
+		catch (SQLException sqlexception)
+		{
+			throw new SystemException(sqlexception);
+
+		}
+		finally
+		{
+			try
+			{
+				if (resultset1 != null)
+					resultset1.close();
+
+				if (preparedstatement1 != null)
+					preparedstatement1.close();
+
+			}
+			catch (SQLException sqlexception1)
+			{
+				throw new SystemException(sqlexception1);
+			}
+		}
+
+		//System.out.println(" column size " + columnsVec.size());
+		return columnsVec;
+
+	}
+
+
+	public static void main(String[] args)
+	{
+		// ColumnManager.TestgetColumnsByTable(3);
+
+	}
+
+}

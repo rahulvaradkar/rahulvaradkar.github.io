@@ -1,0 +1,165 @@
+package servlets;
+/*
+ *  This presents a list of collaboration available to a user
+ */
+import java.io.*;
+import java.util.*;
+import javax.servlet.*;
+import javax.servlet.http.*;
+import com.boardwalk.excel.*;
+import com.boardwalk.exception.*;
+
+
+public class httpt_vb_MyCollaborations extends HttpServlet   implements
+ SingleThreadModel
+ {
+
+	public final static String Seperator = new Character((char)1).toString();
+	public final static String ContentDelimeter = new Character((char)2).toString();
+
+
+	public void service (HttpServletRequest request,
+		HttpServletResponse response)throws ServletException, IOException
+	{
+
+		response.setContentType ( "text/plain");
+
+		ServletOutputStream servletOut = response.getOutputStream ();
+
+		  // System.out.println( "Got output stream");
+		BufferedReader br = request.getReader ();
+
+
+          // System.out.println( "Got input stream");
+		boolean setDefaultAccess = false;
+		String param = getServletConfig().getInitParameter("BW_RESTRICT_NEW_COLUMN");
+		System.out.println("BW_RESTRICT_NEW_COLUMN="+param);
+		if (param != null)
+		{
+			setDefaultAccess = true;
+		}
+
+        StringBuffer sb = new 	StringBuffer ();
+
+        String  line = new String();
+        line = br.readLine ();
+	    while( line != null )
+	    {
+		//	  // System.out.println("appending line:::::: " + line);
+			sb.append(line);
+			line = br.readLine ();
+			if ( line != null )
+			{
+				sb.append("\n");
+			}
+		}
+		String fullTable = sb.toString();
+
+          // System.out.println("Updating Table with data                      ");
+ 		 System.out.println(fullTable);
+
+
+        httpt_vb_createcells cc = new httpt_vb_createcells ( fullTable , setDefaultAccess);
+           // System.out.println("*********** now authenticating user***********");
+
+        StringBuffer responseToUpdate = new StringBuffer() ;
+        if ( cc.loginUser() )
+        {
+              // System.out.println("user is valid");
+            boolean result = cc.Parse ();
+            if (result)
+            {
+
+				Calendar cal = new GregorianCalendar();
+
+				// Get the components of the time
+				int hour12 = cal.get(Calendar.HOUR);            // 0..11
+				int hour24 = cal.get(Calendar.HOUR_OF_DAY);     // 0..23
+				int min = cal.get(Calendar.MINUTE);             // 0..59
+				int sec = cal.get(Calendar.SECOND);             // 0..59
+				int ms = cal.get(Calendar.MILLISECOND);         // 0..999
+				int ampm = cal.get(Calendar.AM_PM);             // 0=AM, 1=PM
+
+				  // System.out.println("Now preparing response buffer");
+				  // System.out.println(cal.get(Calendar.HOUR)+":"+cal.get(Calendar.MINUTE)+":"+cal.get(Calendar.SECOND)+":"+cal.get(Calendar.MILLISECOND));
+
+                responseToUpdate.append("Success");
+                responseToUpdate.append( Seperator + "XID" + ContentDelimeter);
+                responseToUpdate.append(cc.getTransactionIdForNewCommit() + ContentDelimeter);
+
+                Vector newColumns = cc.getNewColumns();
+                Vector newRows = cc.getNewRows();
+
+                if ( newColumns.size() > 0 || newRows.size() > 0 )
+                {
+
+					responseToUpdate = responseToUpdate;
+
+					if ( newRows.size() > 0 )
+					{
+						responseToUpdate.append(Seperator + "ROW" + ContentDelimeter);
+						for ( int nr = 0; nr < newRows.size(); nr++ )
+						{
+
+							xlRow xlrow = (xlRow)newRows.elementAt(nr);
+							String rowAddress = Integer.toString(xlrow.getRowAddress());
+							String rowid = Integer.toString(xlrow.getId());
+							responseToUpdate.append( rowid + ContentDelimeter);
+							responseToUpdate.append(rowAddress + ContentDelimeter);
+						}
+					}
+
+
+					if ( newColumns.size() > 0 )
+					{
+						responseToUpdate.append( Seperator  +  "COLUMN" + ContentDelimeter);
+						for ( int nc = 0; nc < newColumns.size(); nc ++ )
+						{
+							xlColumn xlcol = (xlColumn)newColumns.elementAt(nc);
+							String colAddress = Integer.toString( xlcol.getColumnAddress() );
+							String colid =  Integer.toString( xlcol.getId());
+							responseToUpdate.append(  colid + ContentDelimeter);
+							responseToUpdate.append( colAddress + ContentDelimeter);
+						}
+					}
+
+
+				}
+
+				  // System.out.println("Done preparing response buffer");
+				  // System.out.println(cal.get(Calendar.HOUR)+":"+cal.get(Calendar.MINUTE)+":"+cal.get(Calendar.SECOND)+":"+cal.get(Calendar.MILLISECOND));
+
+
+
+				//  // System.out.println("UpdateBoardwalkResponse: " + responseToUpdate );
+				String responseBuffer = responseToUpdate.toString();
+                response.setContentLength ( responseBuffer.length() );
+                servletOut.println(responseBuffer);
+            }
+            else
+            {
+                responseToUpdate.append("Failure");
+
+                if ( ! cc.getFailureReason().equals("") )
+                {
+					responseToUpdate.append(Seperator + cc.getFailureReason());
+				}
+				String responseBuffer = responseToUpdate.toString();
+                response.setContentLength ( responseBuffer.length() );
+                servletOut.println(responseBuffer);
+            }
+
+        }
+        else
+        {
+              // System.out.println("user is invalid");
+            responseToUpdate.append("Failure"+Seperator +"You are not authorized to update this data");
+			String responseBuffer = responseToUpdate.toString();
+			response.setContentLength ( responseBuffer.length() );
+            servletOut.println(responseBuffer);
+        }
+
+        servletOut.close ();
+    }
+
+}
