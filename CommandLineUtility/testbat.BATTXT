@@ -1,0 +1,41 @@
+rem echo off
+
+echo Please Type your Username
+set /p usern=
+echo "Please Type your Password"
+set /p password=
+
+@ECHO OFF
+call:pwd pass
+if "%pass%"=="dostips" (
+echo.password accepted
+) else (
+echo.password denied
+)
+echo Your username is %usern%
+echo Your username is %password%
+pause
+
+GOTO:EOF
+
+echo " -------------- this is new example -----------------------"
+
+
+:pwd var title color -- shows a password dialog box
+::                   -- var   [in]     - return variable
+::                   -- title [in,opt] - dialog title, default is "Password:"
+::                   -- color [in,opt] - color default is AB (Light Green on Light Aqua)
+:$created 20060101 :$changed 20080226 :$categories Input,Password
+:$source https://www.dostips.com
+SETLOCAL
+set "tit=%~2"
+set "col=%~3"
+set "pwd="
+if not defined col set "col=EF"
+if not defined tit set "tit=Password:"
+set "f=%temp%\%~nx0.tmp~0.tmp"
+start "%tit%" /wait cmd /c "mode con cols=24 lines=1&color %col%&set /p "in="&call echo.%%in%%>"%f%""
+for /f "usebackq tokens=*" %%a in ("%f%") do set "pwd=%%a"
+del /q "%f%"
+ENDLOCAL&if "%~1" NEQ "" (SET %~1=%pwd%) ELSE ECHO.%txt%
+EXIT /b

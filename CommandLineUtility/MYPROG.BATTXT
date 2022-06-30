@@ -1,0 +1,6 @@
+@ECHO OFF
+D:
+CD D:\TIKA
+java PdfView "%~f1"
+c:
+@ECHO OFF

@@ -1,0 +1,42 @@
+::!CARLOS_HIDE_INPUT.BAT
+::Code by Carlos on AMBNT 2013-03-10
+::Subject: Getkey without Display the input.
+::Thread started by jeb
+::Modified to Return password in Arg1 and length in Arg3 by carlsomo
+
+   :::::::::::::BEGIN CODE::::::::::::: 
+
+:GetPassword.cmd Password="Prompt" length
+@echo off&SetLocal DisableDelayedExpansion
+For /F %%# In ('"Prompt;$H&For %%# in (1) Do Rem"') Do Set "BS=%%#"
+Set "Line="
+<Nul set/p="%~2"
+:HILoop
+   Set "Key="
+   For /F "delims=" %%# In (
+      'Xcopy /L /W "%~f0" "%~f0" 2^>Nul'
+   ) Do If Not Defined Key Set "Key=%%#"
+   Set "Key=%Key:~-1%"
+   SetLocal EnableDelayedExpansion
+   If Not Defined Key Goto :HIEnd
+   If %BS%==^%Key% (
+      Set /P "=%BS% %BS%" <Nul
+      Set "Key="
+      If Defined Line Set "Line=!Line:~0,-1!"&set/a length-=1
+   ) Else if ^"==^%Key% (Set "Key="
+   ) Else set/a length+=1&Set /P "=*" <Nul
+   If Not Defined Line (
+      EndLocal& Set "Line=%Key%"& Set/a length=1
+   ) Else For /F delims^=^ eol^= %%# In ("!Line!") Do (
+      EndLocal& Set "Line=%%#%Key%"& Set "length=%length%"
+   )
+Goto :HILoop
+   
+:HIEnd
+if not defined Line set/a length=0
+EndLocal&EndLocal&(
+   if not "%~1"=="" (set "%~1=%Line%") Else (set "Pa$$word=%Line%")
+   if not "%~3"=="" set "%~3=%length%"
+)&exit/b %length%
+
+   ::::::::::::::END OF CODE::::::::::::::
